@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("FlRockBand3.ConsoleApp")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("FL2Magma")]
+[assembly: AssemblyDescription("Convert MIDI files from FL Studio to make them compatible with Magma")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("FlRockBand3.ConsoleApp")]
-[assembly: AssemblyCopyright("Copyright ©  2017")]
+[assembly: AssemblyProduct("FL2Magma")]
+[assembly: AssemblyCopyright("Copyright © Joshua Webb 2017")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

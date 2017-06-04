@@ -21,6 +21,14 @@ namespace FlRockBand3
             IndexTrackNames();
         }
 
+        public void RemoveTracks(IEnumerable<int> trackNumbers)
+        {
+            foreach (var trackNumber in trackNumbers.OrderByDescending(i => i))
+                MidiFile.Events.RemoveTrack(trackNumber);
+
+            IndexTrackNames();
+        }
+
         public void RemoveTrack(int trackNumber)
         {
             MidiFile.Events.RemoveTrack(trackNumber);

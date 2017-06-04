@@ -45,7 +45,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Dumper.cs" />
-    <Compile Include="Fixer.cs" />
+    <Compile Include="MidiFixer.cs" />
     <Compile Include="MidiWrapper.cs" />
     <Compile Include="TrackName.cs" />
     <Compile Include="Note.cs" />
