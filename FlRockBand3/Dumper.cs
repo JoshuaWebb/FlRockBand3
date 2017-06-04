@@ -32,7 +32,7 @@ namespace FlRockBand3
                         var str = trackEvent.ToString();
                         var noteEvent = trackEvent as NoteEvent;
                         if (noteEvent != null)
-                            str += $" {noteEvent.NoteNumber}";
+                            str += $" (NoteNumber: {noteEvent.NoteNumber})";
 
                         sw.WriteLine(str);
                     }

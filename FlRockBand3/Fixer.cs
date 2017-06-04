@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using NAudio.Midi;
 
 namespace FlRockBand3
@@ -12,23 +14,55 @@ namespace FlRockBand3
         private static readonly int TicksInClick = 24;
         private const int NumberOfThirtySecondNotesInQuarterNote = 8;
 
-        /// <summary>
-        /// The name of the note track containing the encoded time signature data
-        /// </summary>
-        private const string TimeSigNoteTrackName = "timesig";
+        // 2 bars worth of 4/4 count-in
+        private static readonly int MusicStartTime = 3840;
+
+        private const ushort PulsesPerQuarterNote = 480;
+        private const ushort FlPulsesPerQuarterNote = 96;
+
+        /// <summary>The default PulsesPerQuarterNote from FL Studio is different than expected</summary>
+        private const int PulsesPerQuarterNoteMultiplier = PulsesPerQuarterNote / FlPulsesPerQuarterNote;
+
 
         public void Fix(string midiPath, string outPath)
         {
             var midi = new MidiWrapper(midiPath);
             RemoveInvalidEvents(midi);
-            AddDefaultDifficultyEvents(TrackName.Drums, midi);
-            AddDrumMixEvents(midi);
             ProcessTimeSignature(midi);
+            AddDrumMixEvents(midi);
             RemoveEmptyTracks(midi);
+            FixNoteData(midi);
             AddEventsTrack(midi);
             AddVenueTrack(midi);
+            AddDefaultDifficultyEvents(TrackName.Drums, midi);
 
             MidiFile.Export(outPath, midi.MidiFile.Events);
+        }
+
+        private static void FixNoteData(MidiWrapper midi)
+        {
+            var rawMidi = midi.MidiFile;
+            for (var i = 0; i < rawMidi.Tracks; i++)
+            {
+                var trackEvents = rawMidi.Events[i];
+                foreach (var trackEvent in trackEvents)
+                {
+                    var noteEvent = trackEvent as NoteEvent;
+                    if (noteEvent != null)
+                        noteEvent.Velocity = Velocity;
+
+                    if (noteEvent != null || MidiEvent.IsEndTrack(trackEvent) || trackEvent is TimeSignatureEvent)
+                    trackEvent.AbsoluteTime *= PulsesPerQuarterNoteMultiplier;
+                }
+            }
+
+            // TODO: Figure out how you're supposed to do this....
+            // TODO: Don't use crazy reflection if we can avoid it.
+            var midiFileDeltaTicksField = typeof(MidiFile).GetField("deltaTicksPerQuarterNote", BindingFlags.Instance | BindingFlags.NonPublic);
+            var midiEventCollectionDeltaTicksField = typeof(MidiEventCollection).GetField("deltaTicksPerQuarterNote", BindingFlags.Instance | BindingFlags.NonPublic);
+            midiFileDeltaTicksField.SetValue(midi.MidiFile, PulsesPerQuarterNote);
+            midiEventCollectionDeltaTicksField.SetValue(midi.MidiFile.Events, PulsesPerQuarterNote);
+
         }
 
         private void AddVenueTrack(MidiWrapper midi)
@@ -36,10 +70,27 @@ namespace FlRockBand3
             midi.AddTrack(TrackName.Venue);
         }
 
-        private void AddEventsTrack(MidiWrapper midi)
+        private static void AddEventsTrack(MidiWrapper midi)
         {
             var events = new List<MidiEvent>();
-            // TODO: build events track events
+
+            var beatTrack = midi.TrackEvents(TrackName.Beat.ToString());
+            var lastBeatOn = beatTrack.OfType<NoteOnEvent>().OrderBy(e => e.AbsoluteTime).Last(MidiEvent.IsNoteOn);
+
+            events.Add(new TextEvent("[crowd_normal]", MetaEventType.TextEvent, 0));
+            events.Add(new TextEvent("[music_start]", MetaEventType.TextEvent, MusicStartTime));
+
+            // Convert event midi tracks to events
+            foreach (var trackName in midi.TrackNames.Where(n => Regex.IsMatch(n, @"\[[^\]]+\]")))
+            {
+                var musicEndTrack = midi.TrackEvents(trackName).OfType<NoteOnEvent>().Single(MidiEvent.IsNoteOn);
+                events.Add(new TextEvent(trackName, MetaEventType.TextEvent, musicEndTrack.AbsoluteTime));
+            }
+
+            // Convert last beat On to [end] event
+            midi.RemoveNote(TrackName.Beat, lastBeatOn);
+            events.Add(new TextEvent("[end]", MetaEventType.TextEvent, lastBeatOn.AbsoluteTime));
+
             midi.AddTrack(TrackName.Events, events);
         }
 
@@ -50,7 +101,7 @@ namespace FlRockBand3
             for (var i = 0; i < rawMidi.Tracks; i++)
             {
                 var trackEvents = rawMidi.Events[i];
-                
+
                 // If a track only has an EndTrack (and optionally a name) then it is "empty"
                 if (!trackEvents.Any(e =>
                     {
@@ -79,8 +130,10 @@ namespace FlRockBand3
 
             var defaultTempoTrack = midi.FindFirstTrackWithEventType(typeof(TempoEvent));
             var timeTrack = midi.MidiFile.Events[defaultTempoTrack];
-            var timeSigEvents = midi.TrackEvents(TimeSigNoteTrackName).OfType<NoteOnEvent>();
+            var timeSigEvents = midi.TrackEvents(TrackName.InputTimeSig.ToString()).OfType<NoteOnEvent>();
             var groups = timeSigEvents.GroupBy(e => e.AbsoluteTime);
+
+            var lastEventTime = 0L;
 
             foreach (var pair in groups)
             {
@@ -91,11 +144,17 @@ namespace FlRockBand3
 
                 var timeSigEvent = new TimeSignatureEvent(pair.Key, numerator, denominator, TicksInClick, NumberOfThirtySecondNotesInQuarterNote);
                 timeTrack.Add(timeSigEvent);
+                lastEventTime = pair.Key;
             }
 
-            timeTrack.Add(new TextEvent(midi.Name, MetaEventType.SequenceTrackName, 0));
+            // update end time
+            var endTrack = timeTrack.Single(MidiEvent.IsEndTrack);
+            endTrack.AbsoluteTime = lastEventTime;
 
-            midi.RemoveTrack(TimeSigNoteTrackName);
+            // Put the name first
+            timeTrack.Insert(0, new TextEvent(midi.Name, MetaEventType.SequenceTrackName, 0));
+
+            midi.RemoveTrack(TrackName.InputTimeSig.ToString());
         }
 
         private static void AddDrumMixEvents(MidiWrapper midi)
@@ -115,20 +174,21 @@ namespace FlRockBand3
             var defaultOcataves = new[] { DifficultyOctave.Easy, DifficultyOctave.Medium, DifficultyOctave.Hard };
             var defaultPitches = new[] { Pitch.E, Pitch.DSharp, Pitch.D, Pitch.CSharp, Pitch.C };
 
-            var startTime = 3840;
+
             var duration = 60;
-            var gap = 30;
+            var gap = 12;
             var channel = 1;
+            var noteTime = MusicStartTime;
             foreach (var pitch in defaultPitches)
             {
                 foreach (var octave in defaultOcataves)
                 {
-                    var noteOn = new NoteOnEvent(startTime, channel, NoteHelper.ToNumber(octave, pitch), Velocity, duration);
+                    var noteOn = new NoteOnEvent(noteTime, channel, NoteHelper.ToNumber(octave, pitch), Velocity, duration);
                     newEvents.Add(noteOn);
                     newEvents.Add(noteOn.OffEvent);
                 }
 
-                startTime += duration + gap;
+                noteTime += duration + gap;
             }
 
             midi.AddEvents(track, newEvents);

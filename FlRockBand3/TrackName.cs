@@ -10,6 +10,13 @@
         public static readonly TrackName Events = new TrackName("EVENTS");
         public static readonly TrackName Time = new TrackName("__TIME");
 
+        public static readonly TrackName Name = new TrackName("__NAME");
+        /// <summary>
+        /// The name of the note track containing the encoded time signature data
+        /// </summary>
+        public static readonly TrackName InputTimeSig = new TrackName("timesig");
+        public static readonly TrackName MusicEnd = new TrackName("[music_end]");
+
         private TrackName(string name)
         {
             _name = name;
@@ -18,6 +25,11 @@
         public override string ToString()
         {
             return _name;
+        }
+
+        public static bool IsNameTrack(TrackName trackName)
+        {
+            return trackName == Name;
         }
     }
 }

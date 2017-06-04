@@ -11,7 +11,7 @@ namespace FlRockBand3.ConsoleApp
     {
         static void Main(string[] args)
         {
-            var inFilePath = @"C:\Shared\midi\motherskyFLTESTING.mid";
+            var inFilePath = @"C:\Shared\midi\motherskyFLTESTING5.mid";
             var inFileName = Path.GetFileNameWithoutExtension(inFilePath);
             var fileDir = new FileInfo(inFilePath).Directory.FullName;
             var outFilePath = Path.Combine(fileDir, Path.ChangeExtension(inFileName, "txt"));

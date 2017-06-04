@@ -90,11 +90,23 @@ namespace FlRockBand3
             IndexTrackNames();
         }
 
+        public void RemoveNote(TrackName trackName, NoteOnEvent noteEvent)
+        {
+            int trackNumber;
+            if (!_tracksNumbersByName.TryGetValue(trackName.ToString(), out trackNumber))
+                throw new ArgumentException($"No track named: {trackName}", nameof(trackName));
+
+            MidiFile.Events[trackNumber].Remove(noteEvent);
+            MidiFile.Events[trackNumber].Remove(noteEvent.OffEvent);
+        }
+
         public void AddTrack(TrackName trackName, List<MidiEvent> midiEvents = null)
         {
             var trackNameEvent = new TextEvent(trackName.ToString(), MetaEventType.SequenceTrackName, 0);
             midiEvents = midiEvents ?? new List<MidiEvent>();
-            midiEvents.Add(trackNameEvent);
+            midiEvents.Insert(0, trackNameEvent);
+            var lastEvent = midiEvents.OrderBy(e => e.AbsoluteTime).Last();
+            midiEvents.Add(new MetaEvent(MetaEventType.EndTrack, 0, lastEvent.AbsoluteTime));
 
             MidiFile.Events.AddTrack(midiEvents);
         }
