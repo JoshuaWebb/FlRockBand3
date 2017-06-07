@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using NAudio.Midi;
+﻿using NAudio.Midi;
 using NUnit.Framework;
 
 namespace FlRockBand3.Test
@@ -8,75 +7,100 @@ namespace FlRockBand3.Test
     public class MidiFixerTests
     {
         [Test]
-        public void TestUpdatePpq()
+        public void TestUpdatePpqMultipleEventsOnMultipleTracks()
         {
-            // TODO: this is probably more complex than the code it is testing
-            //       We need some abstractions for creating midi files with expected properties
+            const int midiFileType = 1;
             const int originalPpq = 96;
             const int newPpq = 480;
 
-            const int originalDuration = 16;
-            const int timeShift = (newPpq / originalPpq);
-            const int newDuration = originalDuration * timeShift;
+            // TODO: hardcode multiplications in to avoid potential bugs?
+            var originalNote = new NoteOnEvent(0, 3, 2, 76, 32);
+            var expectedNote = new NoteOnEvent(0 * 5, 3, 2, 76, 32 * 5);
+            var originalEnd1 = new MetaEvent(MetaEventType.EndTrack, 0, 1200);
+            var expectedEnd1 = new MetaEvent(MetaEventType.EndTrack, 0, 1200 * 5);
 
-            const int channel = 3;
-            const int velocity = 76;
+            var originalText = new TextEvent("Text 1", MetaEventType.TextEvent, 60);
+            var expectedText = new TextEvent("Text 1", MetaEventType.TextEvent, 60 * 5);
+            var originalTimeSignature = new TimeSignatureEvent(200, 2, 2, 24, 8);
+            var expectedTimeSignature = new TimeSignatureEvent(200 * 5, 2, 2, 24, 8);
+            var originalTempo = new TempoEvent(120, 300);
+            var expectedTempo = new TempoEvent(120, 300 * 5);
+            var originalEnd2 = new MetaEvent(MetaEventType.EndTrack, 0, 4000);
+            var expectedEnd2 = new MetaEvent(MetaEventType.EndTrack, 0, 4000 * 5);
 
-            const int originalNote1Time = 0;
-            const int originalNote2Time = 60;
+            var originalMidi = new MidiEventCollection(midiFileType, originalPpq);
+            originalMidi.AddTrack(originalNote, originalNote.OffEvent, originalEnd1);
+            originalMidi.AddTrack(originalText, originalTimeSignature, originalTempo, originalEnd2);
 
-            const int originalText1Time = 60;
-            const string text1Text = "Text 1";
+            var inputMidi = originalMidi.Clone();
 
-            const int originalText2Time = 90;
-            const string text2Text = "Text 2";
+            var expectedMidi = new MidiEventCollection(midiFileType, newPpq);
+            expectedMidi.AddTrack(expectedNote, expectedNote.OffEvent, expectedEnd1);
+            expectedMidi.AddTrack(expectedText, expectedTimeSignature, expectedTempo, expectedEnd2);
 
-            const int endTime1 = 120;
-            const int endTime2 = 400;
+            var actualMidi = MidiFixer.UpdatePpq(inputMidi, newPpq);
 
-            var note1 = new NoteOnEvent(originalNote1Time, channel, 1, velocity, originalDuration);
-            var note2 = new NoteOnEvent(originalNote2Time, channel, 2, velocity, originalDuration);
-            var end1 = new MetaEvent(MetaEventType.EndTrack, 0, endTime1);
-
-            var originalTrack0 = new MidiEvent[] {note1, note2, note1.OffEvent, note2.OffEvent, end1};
-            var originalTrack1 = new MidiEvent[]
-            {
-                new TextEvent(text1Text, MetaEventType.TextEvent, originalText1Time),
-                new TextEvent(text2Text, MetaEventType.TextEvent, originalText2Time),
-                new MetaEvent(MetaEventType.EndTrack, 0, endTime2)
-            };
-
-            var midi = new MidiEventCollection(1, originalPpq);
-            midi.AddTrack(originalTrack0.Select(e => e.Clone()).ToList());
-            midi.AddTrack(originalTrack1.Select(e => e.Clone()).ToList());
-
-            var expectedNote1 = new NoteOnEvent(originalNote1Time * timeShift, channel, note1.NoteNumber, velocity, newDuration);
-            var expectedNote2 = new NoteOnEvent(originalNote2Time * timeShift, channel, note2.NoteNumber, velocity, newDuration);
-            var expectedText1 = new TextEvent(text1Text, MetaEventType.TextEvent, originalText1Time * timeShift);
-            var expectedText2 = new TextEvent(text2Text, MetaEventType.TextEvent, originalText2Time * timeShift);
-            var expectedEnd1 = new MetaEvent(MetaEventType.EndTrack, 0, endTime1 * timeShift);
-            var expectedEnd2 = new MetaEvent(MetaEventType.EndTrack, 0, endTime2 * timeShift);
-
-            var expectedTrack0 = new MidiEvent[] {expectedNote1, expectedNote2, expectedNote1.OffEvent, expectedNote2.OffEvent, expectedEnd1};
-            var expectedTrack1 = new MidiEvent[] {expectedText1, expectedText2, expectedEnd2};
-
-            var numTracks = midi.Tracks;
-            var newMidi = MidiFixer.UpdatePpq(midi, newPpq);
-
-            var comparer = new MidiEventEqualityComparer();
-
-            // Check original midi is not modified
-            Assert.AreEqual(originalPpq, midi.DeltaTicksPerQuarterNote);
-            Assert.AreEqual(numTracks, midi.Tracks);
-            Assert.That(midi[0], Is.EqualTo(originalTrack0).Using(comparer));
-            Assert.That(midi[1], Is.EqualTo(originalTrack1).Using(comparer));
-
-            // Check new midi has properties we want
-            Assert.AreEqual(newPpq, newMidi.DeltaTicksPerQuarterNote);
-            Assert.AreEqual(midi.Tracks, newMidi.Tracks);
-            Assert.That(newMidi[0], Is.EqualTo(expectedTrack0).Using(comparer));
-            Assert.That(newMidi[1], Is.EqualTo(expectedTrack1).Using(comparer));
+            AssertMidiEqual(originalMidi, inputMidi);
+            AssertMidiEqual(expectedMidi, actualMidi);
         }
 
+        [TestCase(50, 75, 4, 6)]
+        [TestCase(50, 100, 3, 6)]
+        [TestCase(50, 100, 0, 0)]
+        [TestCase(100, 50, 0, 0)]
+        [TestCase(100, 50, 6, 3)]
+        [TestCase(100, 75, 6, 4)]
+        public void TestUpdatePpqTextEvent(int originalPpq, int newPpq, int originalTime, int newTime)
+        {
+            var originalMidi = new MidiEventCollection(1, originalPpq);
+            var expectedMidi = new MidiEventCollection(1, newPpq);
+
+            originalMidi.AddTrack(new TextEvent("Text 1", MetaEventType.TextEvent, originalTime));
+            expectedMidi.AddTrack(new TextEvent("Text 1", MetaEventType.TextEvent, newTime));
+
+            // Create a brand new copy of the original midi so we can verify it wasn't modified
+            var inputMidi = originalMidi.Clone();
+            var actualMidi = MidiFixer.UpdatePpq(inputMidi, newPpq);
+
+            AssertMidiEqual(originalMidi, inputMidi);
+            AssertMidiEqual(expectedMidi, actualMidi);
+        }
+
+        [TestCase(50, 75, 4, 6, 8, 12, 5, 20, 30)]
+        [TestCase(50, 100, 3, 6, 6, 12, 5, 53, 30)]
+        [TestCase(50, 100, 0, 0, 5, 10, 5, 19, 2)]
+        [TestCase(100, 75, 6, 4, 12, 9, 5, 20, 19)]
+        [TestCase(100, 50, 6, 3, 12, 6, 7, 20, 30)]
+        [TestCase(100, 50, 0, 0, 10, 5, 5, 20, 30)]
+        public void TestUpdatePpqNoteEvent(int originalPpq, int newPpq, int onTime, int newTime,
+            int offTime, int newOffTime, int channel, int noteNumber, int velocity)
+        {
+            var originalMidi = new MidiEventCollection(1, originalPpq);
+            var expectedMidi = new MidiEventCollection(1, newPpq);
+
+            var originalNoteOn = new NoteOnEvent(onTime, channel, noteNumber, velocity, offTime - onTime);
+            var expectedNoteOn = new NoteOnEvent(newTime, channel, noteNumber, velocity, newOffTime - newTime);
+            originalMidi.AddTrack(originalNoteOn, originalNoteOn.OffEvent);
+            expectedMidi.AddTrack(expectedNoteOn, expectedNoteOn.OffEvent);
+
+            // Create a brand new copy of the original midi so we can verify it wasn't modified
+            var inputMidi = originalMidi.Clone();
+
+            var actualMidi = MidiFixer.UpdatePpq(inputMidi, newPpq);
+
+            AssertMidiEqual(originalMidi, inputMidi);
+            AssertMidiEqual(expectedMidi, actualMidi);
+        }
+
+        private static void AssertMidiEqual(MidiEventCollection expected, MidiEventCollection actual)
+        {
+            var comparer = new MidiEventEqualityComparer();
+
+            Assert.That(actual.Tracks, Is.EqualTo(expected.Tracks));
+            Assert.That(actual.DeltaTicksPerQuarterNote, Is.EqualTo(expected.DeltaTicksPerQuarterNote));
+            Assert.That(actual.MidiFileType, Is.EqualTo(expected.MidiFileType));
+            for (var i = 0; i < expected.Tracks; i++)
+                Assert.That(actual[i], Is.EqualTo(expected[i]).Using(comparer));
+        }
     }
 }

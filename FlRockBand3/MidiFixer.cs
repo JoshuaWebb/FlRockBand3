@@ -41,13 +41,13 @@ namespace FlRockBand3
         public static MidiEventCollection UpdatePpq(MidiEventCollection midi, int newPpq)
         {
             var newMidi = new MidiEventCollection(midi.MidiFileType, newPpq);
-            var multiplier = newPpq / midi.DeltaTicksPerQuarterNote;
+            var multiplier = (double)newPpq / midi.DeltaTicksPerQuarterNote;
             for (var i = 0; i < midi.Tracks; i++)
             {
                 var shiftedEvents = midi[i].Select(e =>
                 {
                     var shiftedEvent = e.Clone();
-                    shiftedEvent.AbsoluteTime *= multiplier;
+                    shiftedEvent.AbsoluteTime = (long)(shiftedEvent.AbsoluteTime * multiplier);
                     return shiftedEvent;
                 });
 

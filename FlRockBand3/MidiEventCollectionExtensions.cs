@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using NAudio.Midi;
 
 namespace FlRockBand3
@@ -25,6 +22,20 @@ namespace FlRockBand3
             }
 
             return newTrack;
+        }
+
+        public static IList<MidiEvent> AddTrack(this MidiEventCollection midiEventCollection, params MidiEvent[] events)
+        {
+            return midiEventCollection.AddTrack(events);
+        }
+
+        public static MidiEventCollection Clone(this MidiEventCollection original)
+        {
+            var newCollection = new MidiEventCollection(original.MidiFileType, original.DeltaTicksPerQuarterNote);
+            for (var i = 0; i < original.Tracks; i++)
+                newCollection.AddTrack(original[i].Select(e => e.Clone()));
+
+            return newCollection;
         }
     }
 }
