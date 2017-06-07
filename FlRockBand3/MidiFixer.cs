@@ -38,6 +38,25 @@ namespace FlRockBand3
             MidiFile.Export(outPath, midi.MidiFile.Events);
         }
 
+        public static MidiEventCollection UpdatePpq(MidiEventCollection midi, int newPpq)
+        {
+            var newMidi = new MidiEventCollection(midi.MidiFileType, newPpq);
+            var multiplier = newPpq / midi.DeltaTicksPerQuarterNote;
+            for (var i = 0; i < midi.Tracks; i++)
+            {
+                var shiftedEvents = midi[i].Select(e =>
+                {
+                    var shiftedEvent = e.Clone();
+                    shiftedEvent.AbsoluteTime *= multiplier;
+                    return shiftedEvent;
+                });
+
+                newMidi.AddTrack(shiftedEvents);
+            }
+
+            return newMidi;
+        }
+
         private static void FixNoteData(MidiWrapper midi)
         {
             var rawMidi = midi.MidiFile;
@@ -51,7 +70,7 @@ namespace FlRockBand3
                         noteEvent.Velocity = Velocity;
 
                     if (noteEvent != null || MidiEvent.IsEndTrack(trackEvent) || trackEvent is TimeSignatureEvent)
-                    trackEvent.AbsoluteTime *= PulsesPerQuarterNoteMultiplier;
+                        trackEvent.AbsoluteTime *= PulsesPerQuarterNoteMultiplier;
                 }
             }
 
