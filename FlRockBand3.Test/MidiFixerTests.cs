@@ -1,4 +1,7 @@
-﻿using NAudio.Midi;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using NAudio.Midi;
 using NUnit.Framework;
 
 namespace FlRockBand3.Test
@@ -90,6 +93,39 @@ namespace FlRockBand3.Test
 
             AssertMidiEqual(originalMidi, inputMidi);
             AssertMidiEqual(expectedMidi, actualMidi);
+        }
+
+        [Test]
+        public void TestNormaliseVelocities()
+        {
+            const int maxVelocity = sbyte.MaxValue;
+            var originalMidi = new MidiEventCollection(1, 200);
+
+            var random = new Random(1000);
+            var notes = Enumerable.Range(1, maxVelocity).
+                Select(velocity =>
+                {
+                    // the other properties shouldn't impact the result so
+                    // we use a "random" assortment of values to get some
+                    // sort of indication that it isn't depending on them
+                    var time = random.Next(1000);
+                    var channel = random.Next(0, 16) + 1;
+                    var number = random.Next(sbyte.MaxValue + 1);
+                    var duration = random.Next(100) + 1;
+                    return new NoteOnEvent(time, channel, number, velocity, duration);
+                }).
+                OrderBy(e => e.AbsoluteTime).
+                ToList();
+
+            // split over multiple tracks
+            originalMidi.AddTrack(notes.Take(maxVelocity / 2));
+            originalMidi.AddTrack(notes.Skip(maxVelocity / 2));
+
+            const int normalisedVelocity = 100;
+            MidiFixer.NormaliseVelocities(originalMidi, normalisedVelocity);
+
+            Assert.That(originalMidi.OfType<NoteOnEvent>(), Has.All.Property(nameof(NoteEvent.Velocity)).EqualTo(normalisedVelocity));
+            Assert.That(originalMidi.SelectMany(t => t).Where(MidiEvent.IsNoteOff), Has.All.Property(nameof(NoteEvent.Velocity)).EqualTo(0));
         }
 
         private static void AssertMidiEqual(MidiEventCollection expected, MidiEventCollection actual)
