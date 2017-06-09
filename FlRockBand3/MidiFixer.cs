@@ -69,6 +69,120 @@ namespace FlRockBand3
             }
         }
 
+        private struct Range
+        {
+            public string Name { get; }
+            public long Start { get; }
+            public long End { get; }
+
+            public Range(string name, long start, long end)
+            {
+                Name = name;
+                Start = start;
+                End = end;
+            }
+        }
+
+        private static IEnumerable<Range> GetRanges(IEnumerable<TextEvent> events)
+        {
+            using (var iter = events.GetEnumerator())
+            {
+                if (!iter.MoveNext()) yield break;
+                var last = iter.Current;
+
+                while (iter.MoveNext())
+                {
+                    yield return new Range(last.Text, last.AbsoluteTime, iter.Current.AbsoluteTime);
+                    last = iter.Current;
+                }
+
+                yield return new Range(last.Text, last.AbsoluteTime, long.MaxValue);
+            }
+        }
+
+        /// <summary>
+        /// Used to specify TextEvents from DAWs/Midi creators that can only use Track Names
+        /// </summary>
+        public static IEnumerable<string> ProcessEventNoteTracks(MidiEventCollection midi)
+        {
+            var eventNamePattern = new Regex(@"^\[[^\]]+\]$");
+            var messages = new List<string>();
+            var tracksToRemove = new HashSet<int>();
+            var allExistingEvents = new List<TextEvent>();
+            var newEvents = new List<TextEvent>();
+            for (var i = 0; i < midi.Tracks; i++)
+            {
+                var trackNames = midi[i].
+                    OfType<TextEvent>().
+                    Where(e => e.MetaEventType == MetaEventType.SequenceTrackName).
+                    OrderBy(e => e.AbsoluteTime).
+                    ToList();
+
+                if (trackNames.Count == 0)
+                    continue;
+
+                var nameEvents = trackNames.Where(e => eventNamePattern.IsMatch(e.Text)).ToList();
+                if (trackNames.Any(e => e.Text == TrackName.Events.ToString()))
+                {
+                    // These don't mix well, so we don't allow it.
+                    if (nameEvents.Any())
+                    {
+                        // TODO: probably not the best exception type??
+                        throw new NotSupportedException($"You cannot have '{TrackName.Events}' and '[event]' events on the same track");
+                    }
+
+                    var existingEvents = midi[i].
+                        OfType<TextEvent>().
+                        Where(e => e.MetaEventType == MetaEventType.TextEvent && eventNamePattern.IsMatch(e.Text));
+
+                    allExistingEvents.AddRange(existingEvents);
+                    tracksToRemove.Add(i);
+                }
+
+                var ranges = GetRanges(nameEvents);
+                foreach(var range in ranges)
+                {
+                    var notes = midi[i].
+                        OfType<NoteOnEvent>().
+                        Where(n => n.AbsoluteTime >= range.Start && n.AbsoluteTime < range.End);
+
+                    var eventsForRange = notes.
+                        Select(n => new TextEvent(range.Name, MetaEventType.TextEvent, n.AbsoluteTime)).
+                        ToList();
+
+                    tracksToRemove.Add(i);
+
+                    if (eventsForRange.Count == 0)
+                    {
+                        messages.Add($"Warning: Cannot convert '{range.Name}' to an event as it has no notes");
+                        continue;
+                    }
+
+                    newEvents.AddRange(eventsForRange);
+                }
+            }
+
+            RemoveTracks(midi, tracksToRemove);
+
+            var newEventTrack = new List<MidiEvent>();
+            var events = allExistingEvents.Concat(newEvents).OrderBy(e => e.AbsoluteTime);
+            newEventTrack.Add(new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0));
+            newEventTrack.AddRange(events);
+            newEventTrack.Add(new MetaEvent(MetaEventType.EndTrack, 0, newEventTrack.Last().AbsoluteTime));
+
+            midi.AddTrack(newEventTrack);
+
+            return messages;
+        }
+
+        private static void RemoveTracks(MidiEventCollection midi, IEnumerable<int> trackNumbersToRemove)
+        {
+            // Remove in reverse order so the number of the remaining tracks to remove
+            // aren't adjusted by the removals as we go
+            foreach (var i in trackNumbersToRemove.OrderByDescending(i => i))
+                midi.RemoveTrack(i);
+        }
+
         private static void FixNoteData(MidiWrapper midi)
         {
             var rawMidi = midi.MidiFile;
