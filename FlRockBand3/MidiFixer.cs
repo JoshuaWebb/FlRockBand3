@@ -57,13 +57,13 @@ namespace FlRockBand3
             return newMidi;
         }
 
-        public static void NormaliseVelocities(MidiEventCollection midi, int normalisedVelocity)
+        public static void NormaliseVelocities(MidiEventCollection midi, int newVelocity)
         {
             for (var i = 0; i < midi.Tracks; i++)
             {
                 foreach (var noteOnEvent in midi[i].OfType<NoteOnEvent>())
                 {
-                    noteOnEvent.Velocity = normalisedVelocity;
+                    noteOnEvent.Velocity = newVelocity;
                     noteOnEvent.OffEvent.Velocity = 0;
                 }
             }
