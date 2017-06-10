@@ -101,45 +101,52 @@ namespace FlRockBand3
         }
 
         /// <summary>
-        /// Used to specify TextEvents from DAWs/Midi creators that can only use Track Names
+        /// Used to specify TextEvents from DAWs/Midi creators that can only use Track Names.
+        /// A SequenceTrackName event is used as the Text, and a NoteOn event is used as the time.
+        ///
+        /// Upon completion, there will be a single EVENTS track in the required format.
         /// </summary>
-        public static IEnumerable<string> ProcessEventNoteTracks(MidiEventCollection midi)
+        public static IEnumerable<string> ProcessEventTracks(MidiEventCollection midi, IEnumerable<string> practiceEvents)
         {
-            var eventNamePattern = new Regex(@"^\[[^\]]+\]$");
+            var validEventNames = new HashSet<string>(EventName.SpecialEventNames.Concat(practiceEvents));
+
             var messages = new List<string>();
             var tracksToRemove = new HashSet<int>();
-            var allExistingEvents = new List<TextEvent>();
+            var existingTextEvents = new List<TextEvent>();
+            var exsitingNoteEvents = new List<MidiEvent>();
             var newEvents = new List<TextEvent>();
             for (var i = 0; i < midi.Tracks; i++)
             {
-                var trackNames = midi[i].
-                    OfType<TextEvent>().
+                var textEvents = midi[i].OfType<TextEvent>();
+                var trackNameEvents = textEvents.
                     Where(e => e.MetaEventType == MetaEventType.SequenceTrackName).
                     OrderBy(e => e.AbsoluteTime).
                     ToList();
 
-                if (trackNames.Count == 0)
+                if (trackNameEvents.Count == 0)
                     continue;
 
-                var nameEvents = trackNames.Where(e => eventNamePattern.IsMatch(e.Text)).ToList();
-                if (trackNames.Any(e => e.Text == TrackName.Events.ToString()))
+                var eventsRequiringConversion = trackNameEvents.Where(e => validEventNames.Contains(e.Text)).ToList();
+                if (trackNameEvents.Any(e => e.Text == TrackName.Events.ToString()))
                 {
                     // These don't mix well, so we don't allow it.
-                    if (nameEvents.Any())
+                    if (eventsRequiringConversion.Any())
                     {
                         // TODO: probably not the best exception type??
                         throw new NotSupportedException($"You cannot have '{TrackName.Events}' and '[event]' events on the same track");
                     }
 
-                    var existingEvents = midi[i].
-                        OfType<TextEvent>().
-                        Where(e => e.MetaEventType == MetaEventType.TextEvent && eventNamePattern.IsMatch(e.Text));
+                    messages.AddRange(FilterEventNotes(midi, i, exsitingNoteEvents));
 
-                    allExistingEvents.AddRange(existingEvents);
+                    // These are regular TextEvents already on the events track
+                    // (not SequenceTrackName events that would require a conversion)
+                    existingTextEvents.AddRange(textEvents.
+                        Where(e => e.MetaEventType == MetaEventType.TextEvent && validEventNames.Contains(e.Text)));
+
                     tracksToRemove.Add(i);
                 }
 
-                var ranges = GetRanges(nameEvents);
+                var ranges = GetRanges(eventsRequiringConversion);
                 foreach(var range in ranges)
                 {
                     var notes = midi[i].
@@ -154,21 +161,67 @@ namespace FlRockBand3
 
                     if (eventsForRange.Count == 0)
                     {
-                        messages.Add($"Warning: Cannot convert '{range.Name}' to an event as it has no notes");
+                        messages.Add($"Warning: Cannot convert '{range.Name}' to an EVENT as it has no notes.");
                         continue;
                     }
 
-                    newEvents.AddRange(eventsForRange);
+                    if (eventsForRange.Count > 1)
+                    {
+                        messages.Add(
+                            $"Warning: Cannot have more than one note for '{range.Name}'; " +
+                            "only the first will be converted to an EVENT.");
+                    }
+
+                    newEvents.Add(eventsForRange.First());
                 }
             }
 
             RemoveTracks(midi, tracksToRemove);
 
-            midi.AddNamedTrack(
-                TrackName.Events.ToString(),
-                allExistingEvents.Concat(newEvents).OrderBy(e => e.AbsoluteTime)
-            );
+            var textEventsGroups = existingTextEvents.Concat(newEvents).
+                GroupBy(e => e.Text).
+                ToList();
 
+            var duplicateEvents = textEventsGroups.Where(kvp => kvp.Count() > 1).Select(kvp => $"'{kvp.Key}'");
+            var duplicateWarnings = string.Join(", ", duplicateEvents);
+
+            if (!string.IsNullOrEmpty(duplicateWarnings))
+                messages.Add($"Warning: Duplicate events {duplicateWarnings}; using first of each.");
+
+            var uniqueTextEvents = textEventsGroups.Select(kvp => kvp.OrderBy(e => e.AbsoluteTime).First());
+
+            var consolidatedEvents = new List<MidiEvent>(uniqueTextEvents);
+            consolidatedEvents.AddRange(exsitingNoteEvents);
+
+            midi.AddNamedTrack(TrackName.Events.ToString(), consolidatedEvents);
+
+            return messages;
+        }
+
+        private const int KickDrumSample = 24;
+        private const int SnareDrumSample = 25;
+        private const int HiHatSample = 26;
+
+        private static readonly HashSet<int> AllowedEventNotes = new HashSet<int>(new[]
+        {
+            KickDrumSample, SnareDrumSample, HiHatSample
+        });
+
+        private static IEnumerable<string> FilterEventNotes(MidiEventCollection midi, int track, List<MidiEvent> targetEvents)
+        {
+            var messages = new List<string>();
+            var noteEvents = midi[track].
+                OfType<NoteEvent>().
+                GroupBy(e => !AllowedEventNotes.Contains(e.NoteNumber)).
+                ToList();
+
+            var invalidNotes = noteEvents.Where(kvp => !kvp.Key).ToList();
+            if (invalidNotes.Any())
+                messages.Add($"Warning: Ignoring {invalidNotes.Count} note(s) on track {TrackName.Events} (#{track})");
+
+            var validNotes = noteEvents.Where(kvp => kvp.Key).SelectMany(e => e);
+
+            targetEvents.AddRange(validNotes);
             return messages;
         }
 

@@ -128,43 +128,42 @@ namespace FlRockBand3.Test
         }
 
         [Test]
-        public void TestProcessEventNoteTracksExistingEvent()
+        public void TestProcessEventTracksExistingEvent()
         {
-            const string newEventText = "[existing]";
-            var newEventTime = 200;
+            const string existingEventText = "[existing]";
+            const int existingEventTime = 100;
+
+            const string newEventText = "[new]";
+            const int newEventTime = 200;
+
             var originalMidi = new MidiEventCollection(1, 200);
             var noteOn = new NoteOnEvent(newEventTime, 1, 2, 3, 4);
-            originalMidi.AddTrack(
-                 new TextEvent(newEventText, MetaEventType.SequenceTrackName, 0),
+            originalMidi.AddNamedTrack(newEventText,
                 noteOn,
                 noteOn.OffEvent,
                 new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
             );
 
-            var existingEvent = new TextEvent(newEventText, MetaEventType.TextEvent, 100);
-            originalMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
-                existingEvent.Clone()
-            );
+            var existingEvent = new TextEvent(existingEventText, MetaEventType.TextEvent, existingEventTime);
+            originalMidi.AddNamedTrack(TrackName.Events.ToString(), existingEvent.Clone());
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
                 existingEvent.Clone(),
                 new TextEvent(newEventText, MetaEventType.TextEvent, newEventTime),
-                new MetaEvent(MetaEventType.EndTrack, 0, Math.Max(existingEvent.AbsoluteTime, newEventTime))
+                new MetaEvent(MetaEventType.EndTrack, 0, newEventTime)
             );
 
-            var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new [] {newEventText, existingEventText});
             Assert.That(result, Is.Empty);
 
             AssertMidiEqual(expectedMidi, originalMidi);
         }
 
-        [TestCase("[x]", 1, 2, 3, 4, 5)]
         [TestCase("[x]", 0, 1, 2, 3, 4)]
+        [TestCase("[x]", 1, 2, 3, 4, 5)]
         [TestCase("[y]", 101, 2, 3, 4, 5)]
-        public void TestProcessEventNoteTracks(string eventText, int t, int c, int n, int v, int d)
+        public void TestProcessEventTracks(string eventText, int t, int c, int n, int v, int d)
         {
             var originalMidi = new MidiEventCollection(1, 200);
             // c, n, v, d should not impact the result
@@ -183,14 +182,14 @@ namespace FlRockBand3.Test
                 new MetaEvent(MetaEventType.EndTrack, 0, t)
             );
 
-            var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new[] {eventText});
             Assert.That(result, Is.Empty);
 
             AssertMidiEqual(expectedMidi, originalMidi);
         }
 
         [Test]
-        public void TestProcessEventNoteTracksIgnoreOtherTracks()
+        public void TestProcessEventTracksIgnoreOtherTracks()
         {
             const string eventText = "[Some Event]";
             const int t = 50;
@@ -203,7 +202,7 @@ namespace FlRockBand3.Test
                 new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
             );
 
-            // This track name has no square brackets (so it doesn't count as an EVENT)
+            // This track name is not in the list (so it doesn't count as an EVENT)
             var regularNote = new NoteOnEvent(t, 1, 2, 3, 4);
             var notEventNoteTrack = new MidiEvent[] {
                 new TextEvent("not an event track", MetaEventType.SequenceTrackName, 0),
@@ -221,7 +220,7 @@ namespace FlRockBand3.Test
             );
             expectedMidi.AddTrackCopy(notEventNoteTrack);
 
-            var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new [] {eventText});
             Assert.That(result, Is.Empty);
 
             // don't care about the order of the tracks
@@ -230,7 +229,7 @@ namespace FlRockBand3.Test
 
         [TestCase(0, 25, 50, 100)]
         [TestCase(0, 0, 50, 50)]
-        public void TestProcessEventNoteTracksMultipleNameEvents(int nameTimeA, int noteTimeA, int nameTimeB, int noteTimeB)
+        public void TestProcessEventTracksMultipleNameEvents(int nameTimeA, int noteTimeA, int nameTimeB, int noteTimeB)
         {
             var originalMidi = new MidiEventCollection(1, 200);
             var nameOneNote = new NoteOnEvent(noteTimeA, 1, 2, 3, 4);
@@ -253,14 +252,14 @@ namespace FlRockBand3.Test
                 new MetaEvent(MetaEventType.EndTrack, 0, nameTwoNote.AbsoluteTime)
             );
 
-            var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name A]", "[Name B]" });
             Assert.That(result, Is.Empty);
 
             AssertMidiEqual(expectedMidi, originalMidi);
         }
 
         [Test]
-        public void TestProcessEventNoteTracksMultipleNameEventsWarning()
+        public void TestProcessEventTracksMultipleNameEventsOneEmptyWarning()
         {
             var originalMidi = new MidiEventCollection(1, 200);
             var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
@@ -280,14 +279,50 @@ namespace FlRockBand3.Test
                 new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
             );
 
-            var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
 
-            Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an event as it has no notes" }));
+            Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
             AssertMidiEqual(expectedMidi, originalMidi);
         }
 
         [Test]
-        public void TestProcessEventNoteTracksOverlappingNameEventsWarning()
+        public void TestProcessEventTracksDuplicatesDifferentTracksWarning()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
+            var noteOn2 = new NoteOnEvent(60, 1, 2, 3, 4);
+            const string eventText = "[Name One]";
+            originalMidi.AddTrack(
+                new TextEvent(eventText, MetaEventType.SequenceTrackName, 1),
+                noteOn,
+                noteOn.OffEvent,
+                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
+            );
+
+            originalMidi.AddTrack(
+                new TextEvent(eventText, MetaEventType.SequenceTrackName, 1),
+                noteOn2,
+                noteOn2.OffEvent,
+                new MetaEvent(MetaEventType.EndTrack, 0, noteOn2.OffEvent.AbsoluteTime)
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddTrack(
+                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
+                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime),
+                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
+            );
+
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
+
+            Assert.That(result, Is.EqualTo(new[] { "Warning: Duplicate events '[Name One]'; using first of each." }));
+            AssertMidiEqual(expectedMidi, originalMidi);
+        }
+
+        // TODO: test sample notes (24 - 26) and invalid notes (everything else) on EVENTS track
+
+        [Test]
+        public void TestProcessEventTracksOverlappingNameEventsWarning()
         {
             var originalMidi = new MidiEventCollection(1, 200);
             var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
@@ -307,14 +342,43 @@ namespace FlRockBand3.Test
                 new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
             );
 
-            var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
 
-            Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an event as it has no notes" }));
+            Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
             AssertMidiEqual(expectedMidi, originalMidi);
         }
 
         [Test]
-        public void TestProcessEventNoteTracksWarning()
+        public void TestProcessEventTracksMultipleNotesWarning()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
+            var noteOn2 = new NoteOnEvent(100, 1, 2, 3, 4);
+            const string eventText = "[Name One]";
+            originalMidi.AddTrack(
+                new TextEvent(eventText, MetaEventType.SequenceTrackName, 0),
+                noteOn,
+                noteOn.OffEvent,
+                noteOn2,
+                noteOn2.OffEvent,
+                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddTrack(
+                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
+                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime),
+                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
+            );
+
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]" });
+
+            Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot have more than one note for '[Name One]'; only the first will be converted to an EVENT." }));
+            AssertMidiEqual(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestProcessEventTracksEmptyWarning()
         {
             var originalMidi = new MidiEventCollection(1, 200);
             originalMidi.AddTrack(
@@ -328,14 +392,14 @@ namespace FlRockBand3.Test
                 new MetaEvent(MetaEventType.EndTrack, 0, 0)
             );
 
-            var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[No Notes]" });
 
-            Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an event as it has no notes" }));
+            Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
             AssertMidiEqual(expectedMidi, originalMidi);
         }
 
         [Test]
-        public void TestProcessEventNoteTracksIgnoreNonEventTrackNames()
+        public void TestProcessEventTracksIgnoreNonEventTrackNames()
         {
             var originalMidi = new MidiEventCollection(1, 200);
             var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
@@ -344,8 +408,8 @@ namespace FlRockBand3.Test
                 new TextEvent(eventText, MetaEventType.SequenceTrackName, 1),
                 noteOn,
                 noteOn.OffEvent,
-                // This track has square brackets, but is just a regular TextEvent
-                new TextEvent("[Not A Name]", MetaEventType.TextEvent, 2),
+                // This track has a valid name, but is just a regular TextEvent
+                new TextEvent("[Name Two]", MetaEventType.TextEvent, 2),
                 new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
             );
 
@@ -356,14 +420,14 @@ namespace FlRockBand3.Test
                 new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
             );
 
-            var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
+            var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[Name Two]" });
 
             Assert.That(result, Is.Empty);
             AssertMidiEqual(expectedMidi, originalMidi);
         }
 
         [Test]
-        public void TestProcessEventNoteTracksMixed()
+        public void TestProcessEventTracksMixedError()
         {
             var originalMidi = new MidiEventCollection(1, 200);
             var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
@@ -372,11 +436,11 @@ namespace FlRockBand3.Test
                 new TextEvent("[Name One]", MetaEventType.SequenceTrackName, 1),
                 noteOn,
                 noteOn.OffEvent,
-                new TextEvent("[Not A Name]", MetaEventType.TextEvent, 2),
+                new TextEvent("[Name Two]", MetaEventType.TextEvent, 2),
                 new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
             );
 
-            Assert.Throws<NotSupportedException>(() => MidiFixer.ProcessEventNoteTracks(originalMidi));
+            Assert.Throws<NotSupportedException>(() => MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[Name Two]" }));
         }
 
         [Test]
@@ -404,8 +468,17 @@ namespace FlRockBand3.Test
             AssertMidiEqual(expectedMidi, originalMidi);
         }
 
-        // TODO: Should multiple EVENTS be allowed at the same time?
-        //       it's a valid MIDI, but what about RB3?
+        // TODO: multiple events are allowed, but not multiple events of the same type
+        //       e.g.
+        //       ok:
+        //          10 crowd_normal
+        //          10 prc_intro_a
+        //       bad:
+        //          20 crowd_normal
+        //          20 crowd_intense
+        //       bad:
+        //          30 prc_intro_a
+        //          30 prc_intro_b
         public void TestMultipleEventsAtSameTime()
         {
 
