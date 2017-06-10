@@ -26,7 +26,7 @@ namespace FlRockBand3
         public void Fix(string midiPath, string outPath)
         {
             var midi = new MidiWrapper(midiPath);
-            RemoveInvalidEvents(midi);
+            RemoveInvalidEventTypes(midi.MidiFile.Events);
             ProcessTimeSignature(midi);
             AddDrumMixEvents(midi);
             RemoveEmptyTracks(midi);
@@ -312,7 +312,7 @@ namespace FlRockBand3
         {
             var newEvents = new List<MidiEvent>();
 
-            var defaultOcataves = new[] { DifficultyOctave.Easy, DifficultyOctave.Medium, DifficultyOctave.Hard };
+            var defaultOctaves = new[] { DifficultyOctave.Easy, DifficultyOctave.Medium, DifficultyOctave.Hard };
             var defaultPitches = new[] { Pitch.E, Pitch.DSharp, Pitch.D, Pitch.CSharp, Pitch.C };
 
             const int duration = 60;
@@ -321,7 +321,7 @@ namespace FlRockBand3
             var noteTime = MusicStartTime;
             foreach (var pitch in defaultPitches)
             {
-                foreach (var octave in defaultOcataves)
+                foreach (var octave in defaultOctaves)
                 {
                     var noteOn = new NoteOnEvent(noteTime, channel, NoteHelper.ToNumber(octave, pitch), Velocity, duration);
                     newEvents.Add(noteOn);
@@ -334,20 +334,14 @@ namespace FlRockBand3
             midi.AddEvents(track, newEvents);
         }
 
-        private static void RemoveInvalidEvents(MidiWrapper midi)
+        public static void RemoveInvalidEventTypes(MidiEventCollection midi)
         {
-            var rawMidi = midi.MidiFile;
-            for (var i = 0; i < rawMidi.Tracks; i++)
+            for (var i = 0; i < midi.Tracks; i++)
             {
-                var trackEvents = rawMidi.Events[i];
+                var trackEvents = midi[i];
                 var invalidEvents = trackEvents.Where(IsInvalid).ToList();
                 foreach (var invalidEvent in invalidEvents)
-                {
-                    if (!trackEvents.Remove(invalidEvent))
-                    {
-                        Console.WriteLine("Could not remove invalid event: " + invalidEvent);
-                    }
-                }
+                    trackEvents.Remove(invalidEvent);
             }
         }
 

@@ -379,6 +379,31 @@ namespace FlRockBand3.Test
             Assert.Throws<NotSupportedException>(() => MidiFixer.ProcessEventNoteTracks(originalMidi));
         }
 
+        [Test]
+        public void TestRemoveInvalidEventTypes()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
+            const string eventText = "[Name One]";
+
+            var bad1 = new ControlChangeEvent(50, 2, MidiController.Sustain, 20);
+            var bad2 = new PatchChangeEvent(29, 4, 1);
+            var bad3 = new PitchWheelChangeEvent(50, 5, 50);
+
+            var stn = new TextEvent(eventText, MetaEventType.SequenceTrackName, 1);
+            var txt = new TextEvent("Some Text", MetaEventType.TextEvent, 2);
+            var tse = new TimeSignatureEvent(0, 2, 2, 24, 8);
+            var tpo = new TempoEvent(600000, 20);
+            var end = new MetaEvent(MetaEventType.EndTrack, 0, 1000);
+            originalMidi.AddTrackCopy(stn, noteOn, bad1, noteOn.OffEvent, txt, tse, bad2, tpo, bad3, end);
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddTrack(stn, noteOn, noteOn.OffEvent, txt, tse, tpo, end);
+
+            MidiFixer.RemoveInvalidEventTypes(originalMidi);
+            AssertMidiEqual(expectedMidi, originalMidi);
+        }
+
         // TODO: Should multiple EVENTS be allowed at the same time?
         //       it's a valid MIDI, but what about RB3?
         public void TestMultipleEventsAtSameTime()
