@@ -6,20 +6,38 @@ namespace FlRockBand3
 {
     public static class MidiEventCollectionExtensions
     {
-        public static IList<MidiEvent> AddTrack(this MidiEventCollection midiEventCollection, IEnumerable<MidiEvent> intialEvents)
+        public static IList<MidiEvent> AddNamedTrack(this MidiEventCollection midiEventCollection, string name, IEnumerable<MidiEvent> initialEvents)
+        {
+            var nameEvent = new TextEvent(name, MetaEventType.SequenceTrackName, 0);
+            var track = midiEventCollection.AddTrack(nameEvent);
+            foreach(var midiEvent in initialEvents)
+                track.Add(midiEvent);
+
+            var endEvent = track.OfType<MetaEvent>().Where(MidiEvent.IsEndTrack).SingleOrDefault();
+            if (endEvent == null)
+            {
+                var lastEvent = track.OrderBy(e => e.AbsoluteTime).Last();
+                track.Add(new MetaEvent(MetaEventType.EndTrack, 0, lastEvent.AbsoluteTime));
+            }
+
+            return track;
+        }
+
+        public static IList<MidiEvent> AddTrackCopy(this MidiEventCollection midiEventCollection, params MidiEvent[] initialEvents)
+        {
+            return midiEventCollection.AddTrackCopy((IList<MidiEvent>)initialEvents);
+        }
+
+        public static IList<MidiEvent> AddTrackCopy(this MidiEventCollection midiEventCollection, IEnumerable<MidiEvent> initialEvents)
+        {
+            return midiEventCollection.AddTrack(initialEvents.Select(e => e.Clone()));
+        }
+
+        public static IList<MidiEvent> AddTrack(this MidiEventCollection midiEventCollection, IEnumerable<MidiEvent> initialEvents)
         {
             var newTrack = midiEventCollection.AddTrack();
-
-            var concreteList = newTrack as List<MidiEvent>;
-            if (concreteList != null)
-            {
-                concreteList.AddRange(intialEvents);
-            }
-            else
-            {
-                foreach (var midiEvent in intialEvents)
-                    newTrack.Add(midiEvent);
-            }
+            foreach (var midiEvent in initialEvents)
+                newTrack.Add(midiEvent);
 
             return newTrack;
         }
@@ -33,7 +51,7 @@ namespace FlRockBand3
         {
             var newCollection = new MidiEventCollection(original.MidiFileType, original.DeltaTicksPerQuarterNote);
             for (var i = 0; i < original.Tracks; i++)
-                newCollection.AddTrack(original[i].Select(e => e.Clone()));
+                newCollection.AddTrackCopy(original[i]);
 
             return newCollection;
         }

@@ -164,13 +164,10 @@ namespace FlRockBand3
 
             RemoveTracks(midi, tracksToRemove);
 
-            var newEventTrack = new List<MidiEvent>();
-            var events = allExistingEvents.Concat(newEvents).OrderBy(e => e.AbsoluteTime);
-            newEventTrack.Add(new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0));
-            newEventTrack.AddRange(events);
-            newEventTrack.Add(new MetaEvent(MetaEventType.EndTrack, 0, newEventTrack.Last().AbsoluteTime));
-
-            midi.AddTrack(newEventTrack);
+            midi.AddNamedTrack(
+                TrackName.Events.ToString(),
+                allExistingEvents.Concat(newEvents).OrderBy(e => e.AbsoluteTime)
+            );
 
             return messages;
         }

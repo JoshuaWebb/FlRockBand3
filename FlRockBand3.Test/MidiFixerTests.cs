@@ -219,7 +219,7 @@ namespace FlRockBand3.Test
                 new TextEvent(eventText, MetaEventType.TextEvent, t),
                 new MetaEvent(MetaEventType.EndTrack, 0, t)
             );
-            expectedMidi.AddTrack(notEventNoteTrack.Select(e => e.Clone()));
+            expectedMidi.AddTrackCopy(notEventNoteTrack);
 
             var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
             Assert.That(result, Is.Empty);
