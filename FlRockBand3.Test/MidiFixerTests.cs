@@ -287,6 +287,33 @@ namespace FlRockBand3.Test
         }
 
         [Test]
+        public void TestProcessEventNoteTracksOverlappingNameEventsWarning()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
+            const string eventText = "[Name One]";
+            originalMidi.AddTrack(
+                new TextEvent("[No Notes]", MetaEventType.SequenceTrackName, 0),
+                new TextEvent(eventText, MetaEventType.SequenceTrackName, 0),
+                noteOn,
+                noteOn.OffEvent,
+                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddTrack(
+                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
+                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime),
+                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
+            );
+
+            var result = MidiFixer.ProcessEventNoteTracks(originalMidi);
+
+            Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an event as it has no notes" }));
+            AssertMidiEqual(expectedMidi, originalMidi);
+        }
+
+        [Test]
         public void TestProcessEventNoteTracksWarning()
         {
             var originalMidi = new MidiEventCollection(1, 200);
