@@ -30,17 +30,83 @@ namespace FlRockBand3
 
         public void Fix(string midiPath, string outPath)
         {
-            var midi = new MidiWrapper(midiPath);
-            RemoveInvalidEventTypes(midi.MidiFile.Events);
-            ProcessTimeSignature(midi);
-            AddDrumMixEvents(midi);
-            RemoveEmptyTracks(midi);
-            FixNoteData(midi);
-            AddEventsTrack(midi);
-            AddVenueTrack(midi);
-            AddDefaultDifficultyEvents(TrackName.Drums, midi);
+            var practiceSections = LoadPracticeSections();
+            var midiFile = new MidiFile(midiPath);
+            var midi = midiFile.Events;
 
-            MidiFile.Export(outPath, midi.MidiFile.Events);
+            midi = UpdatePpq(midi, PulsesPerQuarterNote);
+
+            ProcessEventTracks(midi, practiceSections);
+
+            // Should happen after `ProcessEventTracks` as the above can handle more
+            // cases when the tracks haven't been consolidated yet.
+            ConsolidateTracks(midi);
+
+            ProcessTimeSignatures(midi);
+
+            // TODO: Add [music_start] / [music_end] event if they don't exist
+            // ConvertLastBeatToEnd(midi);
+
+            // TODO: AddDrumMixEvents(midi);
+            // TODO: AddVenueTrack(midi);
+
+            // TODO: AddDefaultDifficultyEvents(TrackName.Drums, midi);
+
+            NormaliseVelocities(midi, Velocity);
+
+            // Do towards the end in case other processes require "invalid" events
+            RemoveInvalidEventTypes(midi);
+
+            MidiFile.Export(outPath, midi);
+        }
+
+        public static IEnumerable<string> LoadPracticeSections()
+        {
+            string practiceSections;
+            try
+            {
+                practiceSections = LoadPracticeSectionsFromFile();
+            }
+            catch (IOException ioe)
+            {
+                // TODO: log message that we're using default practice sections
+                practiceSections = Resources.All_Practice_Sections;
+            }
+
+            var lines = Regex.Split(practiceSections, "\r?\n");
+            var sections = new List<string>();
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                if (line.StartsWith("#"))
+                    continue;
+
+                // [prc_k9] "K section 9"
+                var parts = line.Split(new [] { ' ' }, 2);
+                if (parts[0].StartsWith("[") && parts[0].EndsWith("]"))
+                {
+                    sections.Add(parts[0]);
+                }
+                else
+                {
+                    throw new ArgumentException($"line {i + 1} is invalid: '{line}'");
+                }
+            }
+
+            return sections;
+        }
+
+        private static string LoadPracticeSectionsFromFile()
+        {
+            var appDirectory = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+            if (appDirectory == null)
+                throw new FileNotFoundException("Can't find application directory");
+
+            var path = Path.Combine(appDirectory, "All_Practice_Secionts.txt");
+            return File.ReadAllText(path);
         }
 
         public MidiEventCollection UpdatePpq(MidiEventCollection midi, int newPpq)
