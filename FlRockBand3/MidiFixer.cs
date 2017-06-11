@@ -21,10 +21,6 @@ namespace FlRockBand3
         private static readonly int MusicStartTime = 3840;
 
         private const ushort PulsesPerQuarterNote = 480;
-        private const ushort FlPulsesPerQuarterNote = 96;
-
-        /// <summary>The default PulsesPerQuarterNote from FL Studio is different than expected</summary>
-        private const int PulsesPerQuarterNoteMultiplier = PulsesPerQuarterNote / FlPulsesPerQuarterNote;
 
         public List<string> Messages { get; } = new List<string>();
 
@@ -45,7 +41,8 @@ namespace FlRockBand3
             ProcessTimeSignatures(midi);
 
             // TODO: Add [music_start] / [music_end] event if they don't exist
-            // ConvertLastBeatToEnd(midi);
+            ConvertLastBeatToEnd(midi);
+            ValidateBeatTrack(midi);
 
             // TODO: AddDrumMixEvents(midi);
             // TODO: AddVenueTrack(midi);
@@ -117,6 +114,7 @@ namespace FlRockBand3
             {
                 var shiftedEvents = midi[i].Select(e =>
                 {
+                    // TODO: NoteOn.OffEvent gets real confused, because the OffEvent is cloned separately
                     var shiftedEvent = e.Clone();
                     shiftedEvent.AbsoluteTime = (long)(shiftedEvent.AbsoluteTime * multiplier);
                     return shiftedEvent;
@@ -299,57 +297,62 @@ namespace FlRockBand3
                 midi.RemoveTrack(i);
         }
 
-        private static void FixNoteData(MidiWrapper midi)
-        {
-            var rawMidi = midi.MidiFile;
-            for (var i = 0; i < rawMidi.Tracks; i++)
-            {
-                var trackEvents = rawMidi.Events[i];
-                foreach (var trackEvent in trackEvents)
-                {
-                    var noteEvent = trackEvent as NoteEvent;
-                    if (noteEvent != null)
-                        noteEvent.Velocity = Velocity;
-
-                    if (noteEvent != null || MidiEvent.IsEndTrack(trackEvent) || trackEvent is TimeSignatureEvent)
-                        trackEvent.AbsoluteTime *= PulsesPerQuarterNoteMultiplier;
-                }
-            }
-
-            // TODO: Figure out how you're supposed to do this....
-            // TODO: Don't use crazy reflection if we can avoid it.
-            var midiFileDeltaTicksField = typeof(MidiFile).GetField("deltaTicksPerQuarterNote", BindingFlags.Instance | BindingFlags.NonPublic);
-            var midiEventCollectionDeltaTicksField = typeof(MidiEventCollection).GetField("deltaTicksPerQuarterNote", BindingFlags.Instance | BindingFlags.NonPublic);
-            midiFileDeltaTicksField.SetValue(midi.MidiFile, PulsesPerQuarterNote);
-            midiEventCollectionDeltaTicksField.SetValue(midi.MidiFile.Events, PulsesPerQuarterNote);
-        }
-
         private void AddVenueTrack(MidiWrapper midi)
         {
             midi.AddTrack(TrackName.Venue);
         }
 
-        private static void AddEventsTrack(MidiWrapper midi)
+        private static int DownBeat = 12;
+        private static int UpBeat = 13;
+        public void ValidateBeatTrack(MidiEventCollection midi)
         {
-            var events = new List<MidiEvent>();
+            var beatTrack = midi.GetTrackByName(TrackName.Beat.ToString());
+            var invalidBeats = beatTrack.
+                OfType<NoteOnEvent>().
+                Where(e => e.NoteNumber != DownBeat && e.NoteNumber != UpBeat);
 
-            var beatTrack = midi.TrackEvents(TrackName.Beat.ToString());
-            var lastBeatOn = beatTrack.OfType<NoteOnEvent>().OrderBy(e => e.AbsoluteTime).Last(MidiEvent.IsNoteOn);
-
-            events.Add(new TextEvent("[crowd_normal]", MetaEventType.TextEvent, 0));
-            events.Add(new TextEvent("[music_start]", MetaEventType.TextEvent, MusicStartTime));
-
-            // Convert event midi tracks to events
-            var eventTrackNames = midi.TrackNames.Where(n => Regex.IsMatch(n, @"\[[^\]]+\]")).ToArray();
-            foreach (var trackName in eventTrackNames)
+            if (invalidBeats.Any())
             {
-                var musicEndTrack = midi.TrackEvents(trackName).OfType<NoteOnEvent>().Single(MidiEvent.IsNoteOn);
-                events.Add(new TextEvent(trackName, MetaEventType.TextEvent, musicEndTrack.AbsoluteTime));
-                midi.RemoveTrack(trackName);
+                // TODO: add invalid beat info
+                throw new InvalidBeatTrackException("Invalid beats detected.");
+            }
+        }
+
+        public void ConvertLastBeatToEnd(MidiEventCollection midi)
+        {
+            var beatTrack = midi.GetTrackByName(TrackName.Beat.ToString());
+
+            var lastBeatOn = beatTrack.OfType<NoteOnEvent>().OrderBy(e => e.AbsoluteTime).LastOrDefault(MidiEvent.IsNoteOn);
+            if (lastBeatOn == null)
+                throw new InvalidBeatTrackException($"No notes were found on the {TrackName.Beat} track");
+
+            var eventsTrack = midi.FindTrackByName(TrackName.Events.ToString());
+            if (eventsTrack != null)
+            {
+                var alreadyHasEnd = eventsTrack.
+                    OfType<TextEvent>().
+                    Any(e => e.MetaEventType == MetaEventType.TextEvent && e.Text == EventName.End.ToString());
+
+                if (alreadyHasEnd)
+                {
+                    Messages.Add($"{EventName.End} event already exists, left last beat alone.");
+                    return;
+                }
+            }
+            else
+            {
+                eventsTrack = midi.AddNamedTrack(TrackName.Events.ToString());
             }
 
+            beatTrack.Remove(lastBeatOn);
+            beatTrack.Remove(lastBeatOn.OffEvent);
 
-            midi.AddTrack(TrackName.Events, events);
+            // Fix beat track end
+            var newLastEvent = beatTrack.Where(e => !MidiEvent.IsEndTrack(e)).OrderBy(e => e.AbsoluteTime).Last();
+            SetTrackEnd(beatTrack, newLastEvent.AbsoluteTime);
+
+            eventsTrack.Add(new TextEvent(EventName.End.ToString(), MetaEventType.TextEvent, lastBeatOn.AbsoluteTime));
+            SetTrackEnd(eventsTrack, lastBeatOn.AbsoluteTime);
         }
 
         public void ConsolidateTimeTracks(MidiEventCollection midi)
@@ -484,9 +487,15 @@ namespace FlRockBand3
         {
             var endTrack = events.SingleOrDefault(MidiEvent.IsEndTrack);
             if (endTrack == null)
+            {
                 events.Add(new MetaEvent(MetaEventType.EndTrack, 0, absoluteTime));
+            }
             else
+            {
+                events.Remove(endTrack);
                 endTrack.AbsoluteTime = absoluteTime;
+                events.Add(endTrack);
+            }
         }
 
         private static bool TryConvertToDenominator(int noteNumber, out int denominator)

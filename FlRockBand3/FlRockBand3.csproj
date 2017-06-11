@@ -46,6 +46,7 @@
   <ItemGroup>
     <Compile Include="Dumper.cs" />
     <Compile Include="EventName.cs" />
+    <Compile Include="Exceptions\InvalidBeatTrackException.cs" />
     <Compile Include="Exceptions\TrackNotFoundException.cs" />
     <Compile Include="MidiEventCollectionExtensions.cs" />
     <Compile Include="MidiEventExtensions.cs" />

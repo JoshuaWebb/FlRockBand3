@@ -630,6 +630,105 @@ namespace FlRockBand3.Test
             Assert.AreEqual("A track named 'BEAT' is required, but cannot be found.", ex.Message);
         }
 
+        [Test]
+        public void TestConvertBeatToEndNoBeats()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            originalMidi.AddNamedTrack(TrackName.Beat.ToString());
+
+            var fixer = new MidiFixer();
+            var ex = Assert.Throws<InvalidBeatTrackException>(() => fixer.ConvertLastBeatToEnd(originalMidi));
+
+            Assert.AreEqual("No notes were found on the BEAT track", ex.Message);
+        }
+
+        [Test]
+        public void TestConvertBeatToEndNoEvents()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var beatNote1 = new NoteOnEvent(400, 1, 12, 100, 60);
+            var beatNote2 = new NoteOnEvent(500, 1, 13, 100, 60);
+            originalMidi.AddNamedTrack(TrackName.Beat.ToString(),
+                beatNote1, beatNote1.OffEvent,
+                beatNote2, beatNote2.OffEvent
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddNamedTrackCopy(TrackName.Beat.ToString(),
+                beatNote1, beatNote1.OffEvent
+            );
+
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
+                new TextEvent(EventName.End.ToString(), MetaEventType.TextEvent, beatNote2.AbsoluteTime)
+            );
+
+            var fixer = new MidiFixer();
+            fixer.ConvertLastBeatToEnd(originalMidi);
+
+            MidiAssert.Equivalent(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestValidateBeatTrackBadNotes()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var goodNote1 = new NoteOnEvent(400, 1, 12, 100, 60);
+            var badNote1 = new NoteOnEvent(400, 1, 2, 100, 60);
+            var goodNote2 = new NoteOnEvent(500, 1, 13, 100, 60);
+            var badNote2 = new NoteOnEvent(400, 1, 4, 100, 60);
+            originalMidi.AddNamedTrack(TrackName.Beat.ToString(),
+                goodNote1, goodNote1.OffEvent,
+                badNote1, badNote1.OffEvent,
+                goodNote2, goodNote2.OffEvent,
+                badNote2, badNote2.OffEvent
+            );
+
+            var fixer = new MidiFixer();
+            var ex = Assert.Throws<InvalidBeatTrackException>(() => fixer.ValidateBeatTrack(originalMidi));
+
+            Assert.AreEqual("Invalid beats detected.", ex.Message);
+        }
+
+        [Test]
+        public void TestValidateBeatTrackGoodNotes()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var goodNote1 = new NoteOnEvent(400, 1, 12, 100, 60);
+            var goodNote2 = new NoteOnEvent(500, 1, 13, 100, 60);
+            originalMidi.AddNamedTrack(TrackName.Beat.ToString(),
+                goodNote1, goodNote1.OffEvent,
+                goodNote2, goodNote2.OffEvent
+            );
+
+            var fixer = new MidiFixer();
+            fixer.ValidateBeatTrack(originalMidi);
+
+            Assert.That(fixer.Messages, Is.Empty);
+        }
+
+        [Test]
+        public void TestConvertBeatToEndExistingEnd()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var beatNote1 = new NoteOnEvent(400, 1, 12, 100, 60);
+
+            originalMidi.AddNamedTrack(TrackName.Beat.ToString(), beatNote1, beatNote1.OffEvent);
+
+            var eventsTrack = originalMidi.AddNamedTrack(TrackName.Events.ToString(),
+                new TextEvent(EventName.End.ToString(), MetaEventType.TextEvent, 500)
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddNamedTrackCopy(TrackName.Beat.ToString(), beatNote1, beatNote1.OffEvent);
+            expectedMidi.AddTrackCopy(eventsTrack);
+
+            var fixer = new MidiFixer();
+            fixer.ConvertLastBeatToEnd(originalMidi);
+
+            Assert.AreEqual(new [] { "[end] event already exists, left last beat alone." }, fixer.Messages);
+            MidiAssert.Equivalent(expectedMidi, originalMidi);
+        }
+
         // TODO: multiple events are allowed, but not multiple events of the same type
         //       e.g.
         //       ok:

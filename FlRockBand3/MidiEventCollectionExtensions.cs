@@ -1,11 +1,46 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+using FlRockBand3.Exceptions;
 using NAudio.Midi;
 
 namespace FlRockBand3
 {
     public static class MidiEventCollectionExtensions
     {
+        public static int FindTrackNumberByName(this MidiEventCollection midiEventCollection, string name)
+        {
+            var trackNumber = -1;
+            for (var t = 0; t < midiEventCollection.Tracks; t++)
+            {
+                var isMatch = midiEventCollection[t].OfType<TextEvent>().Any(e => e.IsSequenceTrackName() && e.Text == name);
+                if (!isMatch)
+                    continue;
+
+                if (trackNumber != -1)
+                    throw new InvalidOperationException("Multiple tracks named: " + name);
+
+                trackNumber = t;
+            }
+
+            return trackNumber;
+        }
+
+        public static IList<MidiEvent> FindTrackByName(this MidiEventCollection midiEventCollection, string name)
+        {
+            var trackNumber = FindTrackNumberByName(midiEventCollection, name);
+            return trackNumber == -1 ? null : midiEventCollection[trackNumber];
+        }
+
+        public static IList<MidiEvent> GetTrackByName(this MidiEventCollection midiEventCollection, string name)
+        {
+            var track = midiEventCollection.FindTrackByName(name);
+            if (track == null)
+                throw new TrackNotFoundException(name);
+
+            return track;
+        }
+
         public static IList<MidiEvent> AddNamedTrackCopy(this MidiEventCollection midiEventCollection, string name, params MidiEvent[] initialEvents)
         {
             return AddNamedTrackCopy(midiEventCollection, name, (IEnumerable<MidiEvent>)initialEvents);
