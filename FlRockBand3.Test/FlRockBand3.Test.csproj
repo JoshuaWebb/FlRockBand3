@@ -54,8 +54,10 @@
     <Otherwise />
   </Choose>
   <ItemGroup>
+    <Compile Include="MidiEventCollectionExtensionsTests.cs" />
     <Compile Include="MidiFixerTests.cs" />
     <Compile Include="MidiEventEqualityComparer.cs" />
+    <Compile Include="MidiAssert.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

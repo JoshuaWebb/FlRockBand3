@@ -6,6 +6,16 @@ namespace FlRockBand3
 {
     public static class MidiEventCollectionExtensions
     {
+        public static IList<MidiEvent> AddNamedTrackCopy(this MidiEventCollection midiEventCollection, string name, params MidiEvent[] initialEvents)
+        {
+            return AddNamedTrackCopy(midiEventCollection, name, (IEnumerable<MidiEvent>)initialEvents);
+        }
+
+        public static IList<MidiEvent> AddNamedTrackCopy(this MidiEventCollection midiEventCollection, string name, IEnumerable<MidiEvent> initialEvents)
+        {
+            return AddNamedTrack(midiEventCollection, name, initialEvents.Select(e => e.Clone()));
+        }
+
         public static IList<MidiEvent> AddNamedTrack(this MidiEventCollection midiEventCollection, string name, params MidiEvent[] initialEvents)
         {
             return midiEventCollection.AddNamedTrack(name, (IEnumerable<MidiEvent>)initialEvents);

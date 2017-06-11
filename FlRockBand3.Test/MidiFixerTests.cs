@@ -42,8 +42,8 @@ namespace FlRockBand3.Test
 
             var actualMidi = MidiFixer.UpdatePpq(inputMidi, newPpq);
 
-            AssertMidiEqual(originalMidi, inputMidi);
-            AssertMidiEqual(expectedMidi, actualMidi);
+            MidiAssert.Equal(originalMidi, inputMidi);
+            MidiAssert.Equal(expectedMidi, actualMidi);
         }
 
         [TestCase(50, 75, 4, 6)]
@@ -64,8 +64,8 @@ namespace FlRockBand3.Test
             var inputMidi = originalMidi.Clone();
             var actualMidi = MidiFixer.UpdatePpq(inputMidi, newPpq);
 
-            AssertMidiEqual(originalMidi, inputMidi);
-            AssertMidiEqual(expectedMidi, actualMidi);
+            MidiAssert.Equal(originalMidi, inputMidi);
+            MidiAssert.Equal(expectedMidi, actualMidi);
         }
 
         [TestCase(50, 75, 4, 6, 8, 12, 5, 20, 30)]
@@ -90,8 +90,8 @@ namespace FlRockBand3.Test
 
             var actualMidi = MidiFixer.UpdatePpq(inputMidi, newPpq);
 
-            AssertMidiEqual(originalMidi, inputMidi);
-            AssertMidiEqual(expectedMidi, actualMidi);
+            MidiAssert.Equal(originalMidi, inputMidi);
+            MidiAssert.Equal(expectedMidi, actualMidi);
         }
 
         [Test]
@@ -157,7 +157,7 @@ namespace FlRockBand3.Test
             var result = MidiFixer.ProcessEventTracks(originalMidi, new [] {newEventText, existingEventText});
             Assert.That(result, Is.Empty);
 
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         [TestCase("[x]", 0, 1, 2, 3, 4)]
@@ -185,7 +185,7 @@ namespace FlRockBand3.Test
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] {eventText});
             Assert.That(result, Is.Empty);
 
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         [Test]
@@ -224,7 +224,7 @@ namespace FlRockBand3.Test
             Assert.That(result, Is.Empty);
 
             // don't care about the order of the tracks
-            AssertMidiEquivalent(expectedMidi, originalMidi);
+            MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
 
         [TestCase(0, 25, 50, 100)]
@@ -255,7 +255,7 @@ namespace FlRockBand3.Test
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name A]", "[Name B]" });
             Assert.That(result, Is.Empty);
 
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         [Test]
@@ -282,7 +282,7 @@ namespace FlRockBand3.Test
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
 
             Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         [Test]
@@ -316,7 +316,7 @@ namespace FlRockBand3.Test
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
 
             Assert.That(result, Is.EqualTo(new[] { "Warning: Duplicate events '[Name One]'; using first of each." }));
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         // TODO: test sample notes (24 - 26) and invalid notes (everything else) on EVENTS track
@@ -345,7 +345,7 @@ namespace FlRockBand3.Test
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
 
             Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         [Test]
@@ -374,7 +374,7 @@ namespace FlRockBand3.Test
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]" });
 
             Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot have more than one note for '[Name One]'; only the first will be converted to an EVENT." }));
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         [Test]
@@ -395,7 +395,7 @@ namespace FlRockBand3.Test
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[No Notes]" });
 
             Assert.That(result, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         [Test]
@@ -423,7 +423,7 @@ namespace FlRockBand3.Test
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[Name Two]" });
 
             Assert.That(result, Is.Empty);
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         [Test]
@@ -465,7 +465,7 @@ namespace FlRockBand3.Test
             expectedMidi.AddTrack(stn, noteOn, noteOn.OffEvent, txt, tse, tpo, end);
 
             MidiFixer.RemoveInvalidEventTypes(originalMidi);
-            AssertMidiEqual(expectedMidi, originalMidi);
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         // TODO: multiple events are allowed, but not multiple events of the same type
@@ -482,27 +482,6 @@ namespace FlRockBand3.Test
         public void TestMultipleEventsAtSameTime()
         {
 
-        }
-
-        private static void AssertMidiEqual(MidiEventCollection expected, MidiEventCollection actual)
-        {
-            var comparer = new MidiEventEqualityComparer();
-
-            Assert.That(actual.Tracks, Is.EqualTo(expected.Tracks));
-            Assert.That(actual.DeltaTicksPerQuarterNote, Is.EqualTo(expected.DeltaTicksPerQuarterNote));
-            Assert.That(actual.MidiFileType, Is.EqualTo(expected.MidiFileType));
-            for (var i = 0; i < expected.Tracks; i++)
-                Assert.That(actual[i], Is.EqualTo(expected[i]).Using(comparer));
-        }
-
-        private static void AssertMidiEquivalent(MidiEventCollection expected, MidiEventCollection actual)
-        {
-            var comparer = new MidiEventEqualityComparer();
-
-            Assert.That(actual.Tracks, Is.EqualTo(expected.Tracks));
-            Assert.That(actual.DeltaTicksPerQuarterNote, Is.EqualTo(expected.DeltaTicksPerQuarterNote));
-            Assert.That(actual.MidiFileType, Is.EqualTo(expected.MidiFileType));
-            Assert.That(actual.Select(t => t), Is.EquivalentTo(expected.Select(t => t)).Using(comparer));
         }
     }
 }
