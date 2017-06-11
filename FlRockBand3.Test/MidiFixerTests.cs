@@ -138,11 +138,7 @@ namespace FlRockBand3.Test
 
             var originalMidi = new MidiEventCollection(1, 200);
             var noteOn = new NoteOnEvent(newEventTime, 1, 2, 3, 4);
-            originalMidi.AddNamedTrack(newEventText,
-                noteOn,
-                noteOn.OffEvent,
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
-            );
+            originalMidi.AddNamedTrack(newEventText, noteOn, noteOn.OffEvent);
 
             var existingEvent = new TextEvent(existingEventText, MetaEventType.TextEvent, existingEventTime);
             originalMidi.AddNamedTrack(TrackName.Events.ToString(), existingEvent.Clone());
@@ -150,8 +146,7 @@ namespace FlRockBand3.Test
             var expectedMidi = new MidiEventCollection(1, 200);
             expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
                 existingEvent.Clone(),
-                new TextEvent(newEventText, MetaEventType.TextEvent, newEventTime),
-                new MetaEvent(MetaEventType.EndTrack, 0, newEventTime)
+                new TextEvent(newEventText, MetaEventType.TextEvent, newEventTime)
             );
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new [] {newEventText, existingEventText});
@@ -168,18 +163,11 @@ namespace FlRockBand3.Test
             var originalMidi = new MidiEventCollection(1, 200);
             // c, n, v, d should not impact the result
             var noteOn = new NoteOnEvent(t, c, n, v, d);
-            originalMidi.AddTrack(
-                new TextEvent(eventText, MetaEventType.SequenceTrackName, 0),
-                noteOn,
-                noteOn.OffEvent,
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
-            );
+            originalMidi.AddNamedTrack(eventText, noteOn, noteOn.OffEvent);
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
-                new TextEvent(eventText, MetaEventType.TextEvent, t),
-                new MetaEvent(MetaEventType.EndTrack, 0, t)
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
+                new TextEvent(eventText, MetaEventType.TextEvent, t)
             );
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] {eventText});
@@ -193,32 +181,18 @@ namespace FlRockBand3.Test
         {
             const string eventText = "[Some Event]";
             const int t = 50;
+
             var originalMidi = new MidiEventCollection(1, 200);
             var noteOn = new NoteOnEvent(t, 1, 2, 3, 4);
-            originalMidi.AddTrack(
-                new TextEvent(eventText, MetaEventType.SequenceTrackName, 0),
-                noteOn,
-                noteOn.OffEvent,
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
-            );
+            originalMidi.AddNamedTrack(eventText, noteOn, noteOn.OffEvent);
 
             // This track name is not in the list (so it doesn't count as an EVENT)
             var regularNote = new NoteOnEvent(t, 1, 2, 3, 4);
-            var notEventNoteTrack = new MidiEvent[] {
-                new TextEvent("not an event track", MetaEventType.SequenceTrackName, 0),
-                regularNote,
-                regularNote.OffEvent,
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
-            };
-            originalMidi.AddTrack(notEventNoteTrack);
+            var regularTrack = originalMidi.AddNamedTrack("not an event track", regularNote, regularNote.OffEvent);
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
-                new TextEvent(eventText, MetaEventType.TextEvent, t),
-                new MetaEvent(MetaEventType.EndTrack, 0, t)
-            );
-            expectedMidi.AddTrackCopy(notEventNoteTrack);
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(), new TextEvent(eventText, MetaEventType.TextEvent, t));
+            expectedMidi.AddTrackCopy(regularTrack);
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new [] {eventText});
             Assert.That(result, Is.Empty);
@@ -245,11 +219,9 @@ namespace FlRockBand3.Test
             );
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
                 new TextEvent("[Name A]", MetaEventType.TextEvent, nameOneNote.AbsoluteTime),
-                new TextEvent("[Name B]", MetaEventType.TextEvent, nameTwoNote.AbsoluteTime),
-                new MetaEvent(MetaEventType.EndTrack, 0, nameTwoNote.AbsoluteTime)
+                new TextEvent("[Name B]", MetaEventType.TextEvent, nameTwoNote.AbsoluteTime)
             );
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name A]", "[Name B]" });
@@ -273,10 +245,8 @@ namespace FlRockBand3.Test
             );
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
-                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime),
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
+                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
@@ -292,25 +262,12 @@ namespace FlRockBand3.Test
             var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
             var noteOn2 = new NoteOnEvent(60, 1, 2, 3, 4);
             const string eventText = "[Name One]";
-            originalMidi.AddTrack(
-                new TextEvent(eventText, MetaEventType.SequenceTrackName, 1),
-                noteOn,
-                noteOn.OffEvent,
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
-            );
-
-            originalMidi.AddTrack(
-                new TextEvent(eventText, MetaEventType.SequenceTrackName, 1),
-                noteOn2,
-                noteOn2.OffEvent,
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn2.OffEvent.AbsoluteTime)
-            );
+            originalMidi.AddNamedTrack(eventText, noteOn, noteOn.OffEvent);
+            originalMidi.AddNamedTrack(eventText, noteOn2, noteOn2.OffEvent);
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
-                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime),
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
+                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
@@ -336,10 +293,8 @@ namespace FlRockBand3.Test
             );
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
-                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime),
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
+                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
@@ -355,20 +310,11 @@ namespace FlRockBand3.Test
             var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
             var noteOn2 = new NoteOnEvent(100, 1, 2, 3, 4);
             const string eventText = "[Name One]";
-            originalMidi.AddTrack(
-                new TextEvent(eventText, MetaEventType.SequenceTrackName, 0),
-                noteOn,
-                noteOn.OffEvent,
-                noteOn2,
-                noteOn2.OffEvent,
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
-            );
+            originalMidi.AddNamedTrack(eventText, noteOn, noteOn.OffEvent, noteOn2, noteOn2.OffEvent);
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
-                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime),
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
+                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]" });
@@ -381,16 +327,10 @@ namespace FlRockBand3.Test
         public void TestProcessEventTracksEmptyWarning()
         {
             var originalMidi = new MidiEventCollection(1, 200);
-            originalMidi.AddTrack(
-                new TextEvent("[No Notes]", MetaEventType.SequenceTrackName, 0),
-                new MetaEvent(MetaEventType.EndTrack, 0, 0)
-            );
+            originalMidi.AddNamedTrack("[No Notes]");
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
-                new MetaEvent(MetaEventType.EndTrack, 0, 0)
-            );
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString());
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[No Notes]" });
 
@@ -404,20 +344,16 @@ namespace FlRockBand3.Test
             var originalMidi = new MidiEventCollection(1, 200);
             var noteOn = new NoteOnEvent(50, 1, 2, 3, 4);
             const string eventText = "[Name One]";
-            originalMidi.AddTrack(
-                new TextEvent(eventText, MetaEventType.SequenceTrackName, 1),
+            originalMidi.AddNamedTrack(eventText,
                 noteOn,
                 noteOn.OffEvent,
                 // This track has a valid name, but is just a regular TextEvent
-                new TextEvent("[Name Two]", MetaEventType.TextEvent, 2),
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
+                new TextEvent("[Name Two]", MetaEventType.TextEvent, 2)
             );
 
             var expectedMidi = new MidiEventCollection(1, 200);
-            expectedMidi.AddTrack(
-                new TextEvent(TrackName.Events.ToString(), MetaEventType.SequenceTrackName, 0),
-                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime),
-                new MetaEvent(MetaEventType.EndTrack, 0, noteOn.AbsoluteTime)
+            expectedMidi.AddNamedTrack(TrackName.Events.ToString(),
+                new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
             var result = MidiFixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[Name Two]" });
