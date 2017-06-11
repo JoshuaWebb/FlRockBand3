@@ -404,6 +404,85 @@ namespace FlRockBand3.Test
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
+        [Test]
+        public void TestConsolidateTracksMultipleTrackNames()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            originalMidi.AddTrack(
+                new TextEvent("[Name One]", MetaEventType.SequenceTrackName, 1),
+                new TextEvent("[Name Two]", MetaEventType.SequenceTrackName, 2),
+                new MetaEvent(MetaEventType.EndTrack, 0, 3)
+            );
+
+            var ex = Assert.Throws<InvalidOperationException>(() => MidiFixer.ConsolidateTracks(originalMidi));
+            Assert.AreEqual("Multiple names '[Name One]', '[Name Two]' on the same track.", ex.Message);
+        }
+
+        [Test]
+        public void TestConsolidateTracks()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var noteOn1 = new NoteOnEvent(60, 1, 2, 3, 4);
+            var noteOn2 = new NoteOnEvent(50, 1, 2, 3, 4);
+            const string trackName = "[Name One]";
+
+            originalMidi.AddNamedTrackCopy(trackName, noteOn1, noteOn1.OffEvent);
+            originalMidi.AddNamedTrackCopy(trackName, noteOn2, noteOn2.OffEvent);
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddNamedTrack(trackName, noteOn2, noteOn2.OffEvent, noteOn1, noteOn1.OffEvent);
+
+            MidiFixer.ConsolidateTracks(originalMidi);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestConsolidateTracksNothingToDo()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var noteOn1 = new NoteOnEvent(60, 1, 2, 3, 4);
+            var noteOn2 = new NoteOnEvent(50, 1, 2, 3, 4);
+            const string trackName1 = "[Name One]";
+            const string trackName2 = "[Name Two]";
+
+            var track1 = originalMidi.AddNamedTrack(trackName1, noteOn1, noteOn1.OffEvent);
+            var track2 = originalMidi.AddNamedTrack(trackName2, noteOn2, noteOn2.OffEvent);
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddTrackCopy(track1);
+            expectedMidi.AddTrackCopy(track2);
+
+            MidiFixer.ConsolidateTracks(originalMidi);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestConsolidateMultipleTracks()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            var noteOn1 = new NoteOnEvent(60, 1, 2, 3, 4);
+            var noteOn2 = new NoteOnEvent(50, 1, 2, 3, 4);
+            var text1 = new TextEvent("Text 1", MetaEventType.TextEvent, 20);
+            var text2 = new TextEvent("Text 2", MetaEventType.TextEvent, 30);
+            const string trackName1 = "[Name One]";
+            const string trackName2 = "[Name Two]";
+
+            originalMidi.AddNamedTrackCopy(trackName1, noteOn1, noteOn1.OffEvent);
+            originalMidi.AddNamedTrackCopy(trackName2, noteOn2, noteOn2.OffEvent);
+            originalMidi.AddNamedTrackCopy(trackName1, text1);
+            originalMidi.AddNamedTrackCopy(trackName2, text2);
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddNamedTrack(trackName1, text1, noteOn1, noteOn1.OffEvent);
+            expectedMidi.AddNamedTrack(trackName2, text2, noteOn2, noteOn2.OffEvent);
+
+            MidiFixer.ConsolidateTracks(originalMidi);
+
+            MidiAssert.Equivalent(expectedMidi, originalMidi);
+        }
+
         // TODO: multiple events are allowed, but not multiple events of the same type
         //       e.g.
         //       ok:

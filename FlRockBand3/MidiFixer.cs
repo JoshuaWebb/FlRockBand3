@@ -408,5 +408,54 @@ namespace FlRockBand3
 
             return false;
         }
+
+        public static void ConsolidateTracks(MidiEventCollection midi)
+        {
+            // find all of the names
+            var nameCounts = new Dictionary<string, int>();
+            for (var i = 0; i < midi.Tracks; i++)
+            {
+                var names = midi[i].
+                    OfType<TextEvent>().
+                    Where(e => e.MetaEventType == MetaEventType.SequenceTrackName).
+                    ToList();
+
+                if (names.Count > 1)
+                {
+                    var detail = string.Join(", ", names.Select(n => $"'{n.Text}'"));
+                    throw new InvalidOperationException($"Multiple names {detail} on the same track.");
+                }
+
+                var name = names.FirstOrDefault()?.Text ?? "";
+
+                int count;
+                nameCounts.TryGetValue(name, out count);
+                nameCounts[name] = count + 1;
+            }
+
+            /* For all of the names that appear on more than one track
+             * find all the other tracks that have this name and consolidate them.
+             * We iterate multiple times because the track numbers will change every
+             * time tracks are consolidated. */
+            foreach (var kvp in nameCounts.Where(kvp => kvp.Value > 1))
+            {
+                var name = kvp.Key;
+                var list = new List<MidiEvent>();
+
+                // iterate in reverse so track numbers don't change mid iteration
+                for (var i = midi.Tracks - 1; i >= 0; i--)
+                {
+                    if (!midi[i].OfType<TextEvent>().Any(e => e.IsSequenceTrackName() && e.Text == name))
+                        continue;
+
+                    var events = midi[i].Where(e => !MidiEvent.IsEndTrack(e) && !e.IsSequenceTrackName());
+
+                    list.AddRange(events);
+                    midi.RemoveTrack(i);
+                }
+
+                midi.AddNamedTrack(name, list.OrderBy(e => e.AbsoluteTime));
+            }
+        }
     }
 }

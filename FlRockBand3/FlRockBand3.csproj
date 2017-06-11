@@ -47,6 +47,7 @@
     <Compile Include="Dumper.cs" />
     <Compile Include="EventName.cs" />
     <Compile Include="MidiEventCollectionExtensions.cs" />
+    <Compile Include="MidiEventExtensions.cs" />
     <Compile Include="MidiFixer.cs" />
     <Compile Include="MidiWrapper.cs" />
     <Compile Include="TrackName.cs" />
