@@ -14,6 +14,11 @@
         /// </summary>
         public static readonly TrackName InputTimeSig = new TrackName("timesig");
 
+        /// <summary>
+        /// The processed tempo events track
+        /// </summary>
+        public static readonly TrackName TempoMap = new TrackName("TEMPO MAP");
+
         private TrackName(string name)
         {
             _name = name;

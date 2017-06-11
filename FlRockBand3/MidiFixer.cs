@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using FlRockBand3.Comparer;
+using FlRockBand3.Exceptions;
 using NAudio.Midi;
 
 namespace FlRockBand3
@@ -23,6 +26,8 @@ namespace FlRockBand3
         /// <summary>The default PulsesPerQuarterNote from FL Studio is different than expected</summary>
         private const int PulsesPerQuarterNoteMultiplier = PulsesPerQuarterNote / FlPulsesPerQuarterNote;
 
+        public List<string> Messages { get; } = new List<string>();
+
         public void Fix(string midiPath, string outPath)
         {
             var midi = new MidiWrapper(midiPath);
@@ -38,7 +43,7 @@ namespace FlRockBand3
             MidiFile.Export(outPath, midi.MidiFile.Events);
         }
 
-        public static MidiEventCollection UpdatePpq(MidiEventCollection midi, int newPpq)
+        public MidiEventCollection UpdatePpq(MidiEventCollection midi, int newPpq)
         {
             var newMidi = new MidiEventCollection(midi.MidiFileType, newPpq);
             var multiplier = (double)newPpq / midi.DeltaTicksPerQuarterNote;
@@ -106,11 +111,10 @@ namespace FlRockBand3
         ///
         /// Upon completion, there will be a single EVENTS track in the required format.
         /// </summary>
-        public static IEnumerable<string> ProcessEventTracks(MidiEventCollection midi, IEnumerable<string> practiceEvents)
+        public void ProcessEventTracks(MidiEventCollection midi, IEnumerable<string> practiceEvents)
         {
             var validEventNames = new HashSet<string>(EventName.SpecialEventNames.Concat(practiceEvents));
 
-            var messages = new List<string>();
             var tracksToRemove = new HashSet<int>();
             var existingTextEvents = new List<TextEvent>();
             var exsitingNoteEvents = new List<MidiEvent>();
@@ -136,7 +140,7 @@ namespace FlRockBand3
                         throw new NotSupportedException($"You cannot have '{TrackName.Events}' and '[event]' events on the same track");
                     }
 
-                    messages.AddRange(FilterEventNotes(midi, i, exsitingNoteEvents));
+                    FilterEventNotes(midi, i, exsitingNoteEvents);
 
                     // These are regular TextEvents already on the events track
                     // (not SequenceTrackName events that would require a conversion)
@@ -161,13 +165,13 @@ namespace FlRockBand3
 
                     if (eventsForRange.Count == 0)
                     {
-                        messages.Add($"Warning: Cannot convert '{range.Name}' to an EVENT as it has no notes.");
+                        Messages.Add($"Warning: Cannot convert '{range.Name}' to an EVENT as it has no notes.");
                         continue;
                     }
 
                     if (eventsForRange.Count > 1)
                     {
-                        messages.Add(
+                        Messages.Add(
                             $"Warning: Cannot have more than one note for '{range.Name}'; " +
                             "only the first will be converted to an EVENT.");
                     }
@@ -186,7 +190,7 @@ namespace FlRockBand3
             var duplicateWarnings = string.Join(", ", duplicateEvents);
 
             if (!string.IsNullOrEmpty(duplicateWarnings))
-                messages.Add($"Warning: Duplicate events {duplicateWarnings}; using first of each.");
+                Messages.Add($"Warning: Duplicate events {duplicateWarnings}; using first of each.");
 
             var uniqueTextEvents = textEventsGroups.Select(kvp => kvp.OrderBy(e => e.AbsoluteTime).First());
 
@@ -194,8 +198,6 @@ namespace FlRockBand3
             consolidatedEvents.AddRange(exsitingNoteEvents);
 
             midi.AddNamedTrack(TrackName.Events.ToString(), consolidatedEvents);
-
-            return messages;
         }
 
         private const int KickDrumSample = 24;
@@ -207,9 +209,8 @@ namespace FlRockBand3
             KickDrumSample, SnareDrumSample, HiHatSample
         });
 
-        private static IEnumerable<string> FilterEventNotes(MidiEventCollection midi, int track, List<MidiEvent> targetEvents)
+        private void FilterEventNotes(MidiEventCollection midi, int track, List<MidiEvent> targetEvents)
         {
-            var messages = new List<string>();
             var noteEvents = midi[track].
                 OfType<NoteEvent>().
                 GroupBy(e => !AllowedEventNotes.Contains(e.NoteNumber)).
@@ -217,12 +218,11 @@ namespace FlRockBand3
 
             var invalidNotes = noteEvents.Where(kvp => !kvp.Key).ToList();
             if (invalidNotes.Any())
-                messages.Add($"Warning: Ignoring {invalidNotes.Count} note(s) on track {TrackName.Events} (#{track})");
+                Messages.Add($"Warning: Ignoring {invalidNotes.Count} note(s) on track {TrackName.Events} (#{track})");
 
             var validNotes = noteEvents.Where(kvp => kvp.Key).SelectMany(e => e);
 
             targetEvents.AddRange(validNotes);
-            return messages;
         }
 
         private static void RemoveTracks(MidiEventCollection midi, IEnumerable<int> trackNumbersToRemove)
@@ -282,73 +282,160 @@ namespace FlRockBand3
                 midi.RemoveTrack(trackName);
             }
 
-            // Convert last beat On to [end] event
-            midi.RemoveNote(TrackName.Beat, lastBeatOn);
-            events.Add(new TextEvent("[end]", MetaEventType.TextEvent, lastBeatOn.AbsoluteTime));
 
             midi.AddTrack(TrackName.Events, events);
         }
 
-        private static void RemoveEmptyTracks(MidiWrapper midi)
+        public void ConsolidateTimeTracks(MidiEventCollection midi)
         {
-            var rawMidi = midi.MidiFile;
-            var tracksToRemove = new List<int>();
-            for (var i = 0; i < rawMidi.Tracks; i++)
+            // Duplicate events will be ignored, events with the same time
+            // but other differing properties will not
+            var allTimeSignatureEvents = new HashSet<TimeSignatureEvent>(new TimeSignatureEventComparer());
+            var allTempoEvents = new HashSet<TempoEvent>(new TempoEventComparer());
+            for (var t = midi.Tracks - 1; t >= 0; t--)
             {
-                var trackEvents = rawMidi.Events[i];
+                var timeSignatureEvents = midi[t].OfType<TimeSignatureEvent>().ToList();
+                allTimeSignatureEvents.UnionWith(timeSignatureEvents);
+                foreach (var midiEvent in timeSignatureEvents)
+                    midi[t].Remove(midiEvent);
 
-                // If a track only has an EndTrack (and optionally a name) then it is "empty"
-                if (!trackEvents.Any(e =>
-                    {
-                        var textEvent = e as TextEvent;
-                        var isNameTrack = false;
-                        if (textEvent != null)
-                            isNameTrack = textEvent.MetaEventType == MetaEventType.SequenceTrackName;
+                var tempoEvents = midi[t].OfType<TempoEvent>().ToList();
+                allTempoEvents.UnionWith(tempoEvents);
+                foreach (var midiEvent in tempoEvents)
+                    midi[t].Remove(midiEvent);
 
-                        return !(isNameTrack || MidiEvent.IsEndTrack(e));
-                    }))
-                {
-                    tracksToRemove.Add(i);
-                }
+                RemoveTrackIfEmpty(midi, t);
             }
-            midi.RemoveTracks(tracksToRemove);
+
+            var groupedTimeSignatureEvents = allTimeSignatureEvents.
+                GroupBy(e => e.AbsoluteTime).
+                ToList();
+
+            var conflict = false;
+            var conflictingTimeSignatures = groupedTimeSignatureEvents.Where(g => g.Count() > 1).ToList();
+            if (conflictingTimeSignatures.Any())
+            {
+                // TODO: give details...
+                // Messages.Add(details);
+                conflict = true;
+            }
+
+            var groupedTempoEvents = allTempoEvents.
+                GroupBy(e => e.AbsoluteTime).
+                ToList();
+
+            var conflictingTempos = groupedTempoEvents.Where(g => g.Count() > 1).ToList();
+            if (conflictingTempos.Any())
+            {
+                // TODO: give details...
+                // Messages.Add(details);
+                conflict = true;
+            }
+
+            if (conflict)
+                throw new InvalidOperationException("Conflicting time signature/tempo events");
+
+            var events = new List<MidiEvent>();
+            events.AddRange(groupedTimeSignatureEvents.Select(g => g.First()));
+            events.AddRange(groupedTempoEvents.Select(g => g.First()));
+
+            midi.AddNamedTrack(TrackName.TempoMap.ToString(), events);
         }
 
-        private static void ProcessTimeSignature(MidiWrapper midi)
+        private static void RemoveTrackIfEmpty(MidiEventCollection midi, int trackNumber)
         {
-            var defaultTimeSignatureTrack = midi.FindFirstTrackWithEventType(typeof(TimeSignatureEvent));
-            midi.RemoveTrack(defaultTimeSignatureTrack);
+            // If a track only has an EndTrack (and optionally a name) then it is "empty"
+            if (midi[trackNumber].All(e => e.IsSequenceTrackName() || MidiEvent.IsEndTrack(e)))
+                midi.RemoveTrack(trackNumber);
+        }
 
-            var defaultTempoTrack = midi.FindFirstTrackWithEventType(typeof(TempoEvent));
-            var timeTrack = midi.MidiFile.Events[defaultTempoTrack];
-            var timeSigEvents = midi.TrackEvents(TrackName.InputTimeSig.ToString()).OfType<NoteOnEvent>();
-            var groups = timeSigEvents.GroupBy(e => e.AbsoluteTime);
+        public void ProcessTimeSignatures(MidiEventCollection midi)
+        {
+            // This is way easier if these have already been consolidated
+            ConsolidateTimeTracks(midi);
 
-            var lastEventTime = 0L;
+            var timeSigTrackNo = midi.FindTrackNumberByName(TrackName.InputTimeSig.ToString());
+            if (timeSigTrackNo == -1)
+            {
+                Messages.Add($"Info: No '{TrackName.InputTimeSig}' track");
+                return;
+            }
 
+            var timeEvents = midi[midi.FindTrackNumberByName(TrackName.TempoMap.ToString())];
+
+            var inputTimeSignatureEvents = midi[timeSigTrackNo].OfType<NoteOnEvent>();
+            var groups = inputTimeSignatureEvents.GroupBy(e => e.AbsoluteTime);
+
+            var error = false;
             foreach (var pair in groups)
             {
+                var time = pair.Key;
                 // The higher velocity value is the numerator (top)
                 // And the lower velocity value is the denominator (bottom)
                 var sorted = pair.OrderByDescending(e => e.Velocity).ToArray();
-                var numerator = sorted[0].NoteNumber;
-                var denominator = sorted[1].NoteNumber;
 
-                // TimeSig Event expects the exponent of a base 2 number
-                var timeSigEvent = new TimeSignatureEvent(pair.Key, numerator, (int)Math.Round(Math.Log(denominator, 2)), TicksInClick, No32ndNotesInQuarterNote);
-                timeTrack.Add(timeSigEvent);
-                lastEventTime = pair.Key;
+                // TODO: throw instead/as well... want to report all of the issues at once
+                if (sorted.Length != 2)
+                {
+                    error = true;
+                    // TODO: convert to proper bar/time info... absolute time in ticks doesn't really help.
+                    var detail = string.Join(", ", sorted.Select(e => e.ToString()));
+                    Messages.Add($"Error: Incorrect number of time signature notes at {time}, {detail}");
+                    continue;
+                }
+
+                var numerator = sorted[0].NoteNumber;
+
+                // TODO: throw instead/as well... want to report all of the issues at once
+                int denominator;
+                if (!TryConvertToDenominator(sorted[1].NoteNumber, out denominator))
+                {
+                    error = true;
+                    Messages.Add($"Error: Invalid denominator note '{sorted[1].NoteNumber}' at {time}");
+                    continue;
+                }
+
+                var timeSigEvent = new TimeSignatureEvent(time, numerator, denominator, TicksInClick, No32ndNotesInQuarterNote);
+                var existingTimeSigEvent = timeEvents.OfType<TimeSignatureEvent>().SingleOrDefault(e => e.AbsoluteTime == time);
+                if (existingTimeSigEvent != null)
+                    timeEvents.Remove(existingTimeSigEvent);
+
+                timeEvents.Add(timeSigEvent);
             }
 
-            // update end time
-            var endTrack = timeTrack.Single(MidiEvent.IsEndTrack);
-            endTrack.AbsoluteTime = lastEventTime;
+            if (error)
+                throw new InvalidOperationException("Invalid time signature input");
 
-            // Put the name first
-            timeTrack.Insert(0, new TextEvent(midi.Name, MetaEventType.SequenceTrackName, 0));
+            // Clean up input track
+            midi.RemoveTrack(timeSigTrackNo);
 
-            // Clean up the Note Track
-            midi.RemoveTrack(TrackName.InputTimeSig.ToString());
+            SetTrackEnd(timeEvents, timeEvents.OrderBy(e => e.AbsoluteTime).Last().AbsoluteTime);
+
+            // TODO: If there is no TimeSignatureEvent or TempoEvent at 0, wig out
+        }
+
+        private static void SetTrackEnd(ICollection<MidiEvent> events, long absoluteTime)
+        {
+            var endTrack = events.SingleOrDefault(MidiEvent.IsEndTrack);
+            if (endTrack == null)
+                events.Add(new MetaEvent(MetaEventType.EndTrack, 0, absoluteTime));
+            else
+                endTrack.AbsoluteTime = absoluteTime;
+        }
+
+        private static bool TryConvertToDenominator(int noteNumber, out int denominator)
+        {
+            // We could use Log2(noteNumber) but given the limited valid inputs/outputs
+            // it makes more sense to do this explicitly.
+            switch (noteNumber)
+            {
+                case 2:  denominator = 1; return true;
+                case 4:  denominator = 2; return true;
+                case 8:  denominator = 3; return true;
+                case 16: denominator = 4; return true;
+                case 32: denominator = 5; return true;
+                default: denominator = 0; return false;
+            }
         }
 
         private static void AddDrumMixEvents(MidiWrapper midi)
@@ -387,7 +474,7 @@ namespace FlRockBand3
             midi.AddEvents(track, newEvents);
         }
 
-        public static void RemoveInvalidEventTypes(MidiEventCollection midi)
+        public void RemoveInvalidEventTypes(MidiEventCollection midi)
         {
             for (var i = 0; i < midi.Tracks; i++)
             {
@@ -409,7 +496,7 @@ namespace FlRockBand3
             return false;
         }
 
-        public static void ConsolidateTracks(MidiEventCollection midi)
+        public void ConsolidateTracks(MidiEventCollection midi)
         {
             // find all of the names
             var nameCounts = new Dictionary<string, int>();
