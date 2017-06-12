@@ -97,6 +97,9 @@ namespace FlRockBand3.Test
 
             MidiAssert.Equal(originalMidi, inputMidi);
             MidiAssert.Equal(expectedMidi, actualMidi);
+
+            // Verify the NoteOnEvent.OffEvent link
+            Assert.AreEqual(expectedMidi[0][1], ((NoteOnEvent)expectedMidi[0][0]).OffEvent);
         }
 
         [Test]

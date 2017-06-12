@@ -108,17 +108,35 @@ namespace FlRockBand3
 
         public MidiEventCollection UpdatePpq(MidiEventCollection midi, int newPpq)
         {
+            var comparer = new NoteEventComparer();
             var newMidi = new MidiEventCollection(midi.MidiFileType, newPpq);
             var multiplier = (double)newPpq / midi.DeltaTicksPerQuarterNote;
-            for (var i = 0; i < midi.Tracks; i++)
+            for (var track = 0; track < midi.Tracks; track++)
             {
-                var shiftedEvents = midi[i].Select(e =>
+                var midiEvents = midi[track] as List<MidiEvent> ?? midi[track].ToList();
+                var shiftedEvents = new MidiEvent[midiEvents.Count];
+                for (var e = 0; e < midiEvents.Count; e++)
                 {
-                    // TODO: NoteOn.OffEvent gets real confused, because the OffEvent is cloned separately
-                    var shiftedEvent = e.Clone();
+                    var midiEvent = midiEvents[e];
+                    var shiftedEvent = midiEvent.Clone();
+
+                    var noteEvent = midiEvent as NoteEvent;
+                    if (noteEvent != null)
+                    {
+                        var noteOnEvent = noteEvent as NoteOnEvent;
+                        // NoteOff events are shifted when the NoteOn is shifted
+                        if (noteOnEvent == null) continue;
+
+                        var clonedNote = (NoteOnEvent) shiftedEvent;
+                        var clonedOff = clonedNote.OffEvent;
+                        clonedOff.AbsoluteTime = (long) (clonedOff.AbsoluteTime * multiplier);
+                        var offEventIndex = midiEvents.FindIndex(m => comparer.Equals(m as NoteEvent, noteOnEvent.OffEvent));
+                        shiftedEvents[offEventIndex] = clonedOff;
+                    }
+
                     shiftedEvent.AbsoluteTime = (long)(shiftedEvent.AbsoluteTime * multiplier);
-                    return shiftedEvent;
-                });
+                    shiftedEvents[e] = shiftedEvent;
+                }
 
                 newMidi.AddTrack(shiftedEvents);
             }

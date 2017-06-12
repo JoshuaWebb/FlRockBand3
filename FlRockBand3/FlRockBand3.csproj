@@ -44,6 +44,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Comparer\NoteEventComparer.cs" />
     <Compile Include="Dumper.cs" />
     <Compile Include="EventName.cs" />
     <Compile Include="Exceptions\InvalidBeatTrackException.cs" />
