@@ -42,10 +42,10 @@ namespace FlRockBand3
 
             // TODO: Add [music_start] / [music_end] event if they don't exist
             ConvertLastBeatToEnd(midi);
+
             ValidateBeatTrack(midi);
 
             // TODO: AddDrumMixEvents(midi);
-            // TODO: AddVenueTrack(midi);
 
             // TODO: AddDefaultDifficultyEvents(TrackName.Drums, midi);
 
@@ -53,6 +53,8 @@ namespace FlRockBand3
 
             // Do towards the end in case other processes require "invalid" events
             RemoveInvalidEventTypes(midi);
+
+            AddVenueTrack(midi);
 
             MidiFile.Export(outPath, midi);
         }
@@ -315,9 +317,13 @@ namespace FlRockBand3
                 midi.RemoveTrack(i);
         }
 
-        private void AddVenueTrack(MidiWrapper midi)
+        public void AddVenueTrack(MidiEventCollection midi)
         {
-            midi.AddTrack(TrackName.Venue);
+            var existingTrack = midi.FindTrackNumberByName(TrackName.Venue.ToString());
+            if (existingTrack != -1)
+                return;
+
+            midi.AddNamedTrack(TrackName.Venue.ToString());
         }
 
         private static int DownBeat = 12;
@@ -436,6 +442,7 @@ namespace FlRockBand3
                 midi.RemoveTrack(trackNumber);
         }
 
+        // TODO: test this guy
         public void ProcessTimeSignatures(MidiEventCollection midi)
         {
             // This is way easier if these have already been consolidated
@@ -444,6 +451,7 @@ namespace FlRockBand3
             var timeSigTrackNo = midi.FindTrackNumberByName(TrackName.InputTimeSig.ToString());
             if (timeSigTrackNo == -1)
             {
+                // TODO: split Messages into further categories ??
                 Messages.Add($"Info: No '{TrackName.InputTimeSig}' track");
                 return;
             }
@@ -460,8 +468,6 @@ namespace FlRockBand3
                 // The higher velocity value is the numerator (top)
                 // And the lower velocity value is the denominator (bottom)
                 var sorted = pair.OrderByDescending(e => e.Velocity).ToArray();
-
-                // TODO: throw instead/as well... want to report all of the issues at once
                 if (sorted.Length != 2)
                 {
                     error = true;
@@ -473,7 +479,6 @@ namespace FlRockBand3
 
                 var numerator = sorted[0].NoteNumber;
 
-                // TODO: throw instead/as well... want to report all of the issues at once
                 int denominator;
                 if (!TryConvertToDenominator(sorted[1].NoteNumber, out denominator))
                 {
@@ -533,6 +538,7 @@ namespace FlRockBand3
 
         private static void AddDrumMixEvents(MidiWrapper midi)
         {
+            // TODO: do these need to be offset? or can they happen all at the same time?
             const int mixEventStartTime = 120;
             var newEvents = new List<MidiEvent>();
             for (var i = 0; i < 4; i++)
