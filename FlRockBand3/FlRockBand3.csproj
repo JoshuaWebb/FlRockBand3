@@ -44,7 +44,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Comparer\NoteEventComparer.cs" />
+    <Compile Include="Comparer\NoteEventEqualityComparer.cs" />
     <Compile Include="Dumper.cs" />
     <Compile Include="EventName.cs" />
     <Compile Include="Exceptions\InvalidBeatTrackException.cs" />
@@ -58,8 +58,8 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <Compile Include="Comparer\TempoEventComparer.cs" />
-    <Compile Include="Comparer\TimeSignatureEventComparer.cs" />
+    <Compile Include="Comparer\TempoEventEqualityComparer.cs" />
+    <Compile Include="Comparer\TimeSignatureEventEqualityComparer.cs" />
     <Compile Include="TrackName.cs" />
     <Compile Include="Note.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

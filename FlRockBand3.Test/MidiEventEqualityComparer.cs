@@ -6,8 +6,9 @@ namespace FlRockBand3.Test
 {
     public class MidiEventEqualityComparer : IEqualityComparer<MidiEvent>
     {
-        private readonly TimeSignatureEventComparer _timeSignatureEventComparer = new TimeSignatureEventComparer();
-        private readonly TempoEventComparer _tempoEventComparer = new TempoEventComparer();
+        private readonly TimeSignatureEventEqualityComparer _timeSignatureEventEqualityComparer = new TimeSignatureEventEqualityComparer();
+        private readonly TempoEventEqualityComparer _tempoEventEqualityComparer = new TempoEventEqualityComparer();
+        private readonly NoteEventEqualityComparer _noteEventEqualityComparer = new NoteEventEqualityComparer();
 
         public bool Equals(MidiEvent x, MidiEvent y)
         {
@@ -18,26 +19,22 @@ namespace FlRockBand3.Test
             var timeSignatureEventX = x as TimeSignatureEvent;
             var timeSignatureEventY = y as TimeSignatureEvent;
             if (timeSignatureEventX != null)
-                return _timeSignatureEventComparer.Equals(timeSignatureEventX, timeSignatureEventY);
+                return _timeSignatureEventEqualityComparer.Equals(timeSignatureEventX, timeSignatureEventY);
 
             var tempoEventX = x as TempoEvent;
             var tempoEventY = y as TempoEvent;
             if (tempoEventX != null)
-                return _tempoEventComparer.Equals(tempoEventX, tempoEventY);
+                return _tempoEventEqualityComparer.Equals(tempoEventX, tempoEventY);
+
+            var noteEventX = x as NoteEvent;
+            var noteEventY = y as NoteEvent;
+            if (noteEventX != null)
+                return _noteEventEqualityComparer.Equals(noteEventX, noteEventY);
 
             if (x.AbsoluteTime != y.AbsoluteTime) return false;
             if (x.Channel != y.Channel) return false;
             if (x.CommandCode != y.CommandCode) return false;
             if (x.DeltaTime != y.DeltaTime) return false;
-
-            if (MidiEvent.IsNoteOn(x) != MidiEvent.IsNoteOn(y)) return false;
-            var noteEventX = x as NoteEvent;
-            var noteEventY = y as NoteEvent;
-            if (noteEventX != null && noteEventY != null)
-            {
-                if (noteEventX.NoteNumber != noteEventY.NoteNumber) return false;
-                if (noteEventX.Velocity != noteEventY.Velocity) return false;
-            }
 
             var textEventX = x as TextEvent;
             var textEventY = y as TextEvent;
@@ -52,7 +49,7 @@ namespace FlRockBand3.Test
 
         public int GetHashCode(MidiEvent obj)
         {
-            return obj.GetHashCode();
+            return obj.AbsoluteTime.GetHashCode();
         }
     }
 }

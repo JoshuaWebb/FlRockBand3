@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 using NAudio.Midi;
 
 namespace FlRockBand3.Comparer
 {
-    public class NoteEventComparer : IEqualityComparer<NoteEvent>
+    public class NoteEventEqualityComparer : IEqualityComparer<NoteEvent>
     {
         public bool Equals(NoteEvent x, NoteEvent y)
         {

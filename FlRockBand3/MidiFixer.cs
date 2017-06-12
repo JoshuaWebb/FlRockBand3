@@ -108,7 +108,7 @@ namespace FlRockBand3
 
         public MidiEventCollection UpdatePpq(MidiEventCollection midi, int newPpq)
         {
-            var comparer = new NoteEventComparer();
+            var comparer = new NoteEventEqualityComparer();
             var newMidi = new MidiEventCollection(midi.MidiFileType, newPpq);
             var multiplier = (double)newPpq / midi.DeltaTicksPerQuarterNote;
             for (var track = 0; track < midi.Tracks; track++)
@@ -377,8 +377,8 @@ namespace FlRockBand3
         {
             // Duplicate events will be ignored, events with the same time
             // but other differing properties will not
-            var allTimeSignatureEvents = new HashSet<TimeSignatureEvent>(new TimeSignatureEventComparer());
-            var allTempoEvents = new HashSet<TempoEvent>(new TempoEventComparer());
+            var allTimeSignatureEvents = new HashSet<TimeSignatureEvent>(new TimeSignatureEventEqualityComparer());
+            var allTempoEvents = new HashSet<TempoEvent>(new TempoEventEqualityComparer());
             for (var t = midi.Tracks - 1; t >= 0; t--)
             {
                 var timeSignatureEvents = midi[t].OfType<TimeSignatureEvent>().ToList();

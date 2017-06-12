@@ -3,7 +3,7 @@ using NAudio.Midi;
 
 namespace FlRockBand3.Comparer
 {
-    public class TimeSignatureEventComparer : IEqualityComparer<TimeSignatureEvent>
+    public class TimeSignatureEventEqualityComparer : IEqualityComparer<TimeSignatureEvent>
     {
         public bool Equals(TimeSignatureEvent x, TimeSignatureEvent y)
         {

@@ -732,6 +732,12 @@ namespace FlRockBand3.Test
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
 
+        [Test]
+        public void TestProcessTimeSignatures()
+        {
+            Assert.Fail("TODO");
+        }
+
         // TODO: multiple events are allowed, but not multiple events of the same type
         //       e.g.
         //       ok:
