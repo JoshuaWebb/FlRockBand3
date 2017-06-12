@@ -45,6 +45,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Comparer\NoteEventEqualityComparer.cs" />
+    <Compile Include="DrumMixEvent.cs" />
     <Compile Include="Dumper.cs" />
     <Compile Include="EventName.cs" />
     <Compile Include="Exceptions\InvalidBeatTrackException.cs" />

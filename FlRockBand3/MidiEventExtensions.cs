@@ -1,22 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using NAudio.Midi;
+﻿using NAudio.Midi;
 
 namespace FlRockBand3
 {
     public static class MidiEventExtensions
     {
-        public static bool IsSequenceTrackName(this MidiEvent textEvent)
+        public static bool IsSequenceTrackName(this MidiEvent midiEvent)
         {
-            return IsSequenceTrackName(textEvent as TextEvent);
+            return IsSequenceTrackName(midiEvent as TextEvent);
         }
 
         public static bool IsSequenceTrackName(this TextEvent textEvent)
         {
             return textEvent != null && textEvent.MetaEventType == MetaEventType.SequenceTrackName;
+        }
+
+        public static DrumMixEvent AsDrumMixEvent(this TextEvent textEvent)
+        {
+            DrumMixEvent drumMixEvent;
+            return DrumMixEvent.TryParse(textEvent, out drumMixEvent) ? drumMixEvent : null;
         }
     }
 }

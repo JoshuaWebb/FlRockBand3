@@ -733,6 +733,59 @@ namespace FlRockBand3.Test
         }
 
         [Test]
+        public void TestAddDrumMixEventsMissingTrack()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+
+            var fixer = new MidiFixer();
+            var ex = Assert.Throws<TrackNotFoundException>(() => fixer.AddDrumMixEvents(originalMidi));
+            Assert.AreEqual(TrackName.Drums.ToString(), ex.TrackName);
+        }
+
+        [Test]
+        public void TestAddDrumMixEventsNonePresent()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            originalMidi.AddNamedTrack(TrackName.Drums.ToString());
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddNamedTrack(TrackName.Drums.ToString(),
+                new TextEvent("[mix 0 drums0]", MetaEventType.TextEvent, 0),
+                new TextEvent("[mix 1 drums0]", MetaEventType.TextEvent, 0),
+                new TextEvent("[mix 2 drums0]", MetaEventType.TextEvent, 0),
+                new TextEvent("[mix 3 drums0]", MetaEventType.TextEvent, 0)
+            );
+
+            var fixer = new MidiFixer();
+            fixer.AddDrumMixEvents(originalMidi);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestAddDrumMixEventsSomePresent()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+            originalMidi.AddNamedTrack(TrackName.Drums.ToString(),
+                new TextEvent("[mix 0 drums0d]", MetaEventType.TextEvent, 0),
+                new TextEvent("[mix 2 drums2d]", MetaEventType.TextEvent, 0)
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddNamedTrack(TrackName.Drums.ToString(),
+                new TextEvent("[mix 0 drums0d]", MetaEventType.TextEvent, 0),
+                new TextEvent("[mix 1 drums0]", MetaEventType.TextEvent, 0),
+                new TextEvent("[mix 2 drums2d]", MetaEventType.TextEvent, 0),
+                new TextEvent("[mix 3 drums0]", MetaEventType.TextEvent, 0)
+            );
+
+            var fixer = new MidiFixer();
+            fixer.AddDrumMixEvents(originalMidi);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
         public void TestProcessTimeSignatures()
         {
             Assert.Fail("TODO");

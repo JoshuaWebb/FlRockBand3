@@ -45,7 +45,7 @@ namespace FlRockBand3
 
             ValidateBeatTrack(midi);
 
-            // TODO: AddDrumMixEvents(midi);
+            AddDrumMixEvents(midi);
 
             // TODO: AddDefaultDifficultyEvents(TrackName.Drums, midi);
 
@@ -536,15 +536,24 @@ namespace FlRockBand3
             }
         }
 
-        private static void AddDrumMixEvents(MidiWrapper midi)
+        public void AddDrumMixEvents(MidiEventCollection midi)
         {
-            // TODO: do these need to be offset? or can they happen all at the same time?
-            const int mixEventStartTime = 120;
-            var newEvents = new List<MidiEvent>();
-            for (var i = 0; i < 4; i++)
-                newEvents.Add(new TextEvent($"[mix {i} drums0]", MetaEventType.TextEvent, (i + 1) * mixEventStartTime));
+            var drumTrack = midi.GetTrackByName(TrackName.Drums.ToString());
+            var existingMixEvents = drumTrack.
+                OfType<TextEvent>().
+                Where(e => e.AbsoluteTime == 0 && e.MetaEventType == MetaEventType.TextEvent).
+                Select(e => e.AsDrumMixEvent()).
+                Where(e => e != null).
+                ToList();
 
-            midi.AddEvents(TrackName.Drums, newEvents);
+            for (var difficulty = 0; difficulty < 4; difficulty++)
+            {
+                if (existingMixEvents.Any(e => e.Difficulty == difficulty))
+                    continue;
+
+                // Try to keep them in order
+                drumTrack.Insert(difficulty + 1, DrumMixEvent.DefaultFor(difficulty));
+            }
         }
 
         private static void AddDefaultDifficultyEvents(TrackName track, MidiWrapper midi)
