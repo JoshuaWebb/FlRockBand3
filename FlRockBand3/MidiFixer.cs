@@ -62,6 +62,24 @@ namespace FlRockBand3
             MidiFile.Export(outPath, midi);
         }
 
+        private static MidiEventLocation GetBarInfo(MidiEventCollection midi, long absoluteTime)
+        {
+            var ppq = midi.DeltaTicksPerQuarterNote;
+            var totalQuarterNote = absoluteTime / (double)ppq;
+            // TODO: also calcualte the actual bar / beat given time signatures?
+            var beatsPerBar = 4;
+            var quarterNotesPerBar = 4;
+            var fourFourBar = ((int)totalQuarterNote / quarterNotesPerBar) + 1;
+            var fourFourBeat = ((int)totalQuarterNote % beatsPerBar) + 1;
+            var fourFourTicks = (int)(absoluteTime % ppq);
+            return new MidiEventLocation(absoluteTime, fourFourBar, fourFourBeat, fourFourTicks);
+        }
+
+        public static MidiEventLocation GetBarInfo(MidiEventCollection midi, MidiEvent midiEvent)
+        {
+            return GetBarInfo(midi, midiEvent.AbsoluteTime);
+        }
+
         public static IEnumerable<string> LoadPracticeSections()
         {
             string practiceSections;
@@ -304,13 +322,14 @@ namespace FlRockBand3
             var beatTrack = midi.GetTrackByName(TrackName.Beat.ToString());
             var invalidBeats = beatTrack.
                 OfType<NoteOnEvent>().
-                Where(e => e.NoteNumber != DownBeat && e.NoteNumber != UpBeat);
+                Where(e => e.NoteNumber != DownBeat && e.NoteNumber != UpBeat).
+                ToList();
 
-            if (invalidBeats.Any())
-            {
-                // TODO: add invalid beat info
+            foreach (var beat in invalidBeats)
+                Messages.Add($"Invalid note: {beat.NoteName} ({beat.NoteNumber}) at {GetBarInfo(midi, beat)}");
+
+            if (invalidBeats.Count > 0)
                 throw new InvalidBeatTrackException("Invalid beats detected.");
-            }
         }
 
         public void ConvertLastBeatToEnd(MidiEventCollection midi)
@@ -375,13 +394,16 @@ namespace FlRockBand3
                 GroupBy(e => e.AbsoluteTime).
                 ToList();
 
-            var conflict = false;
+            var hasConflict = false;
             var conflictingTimeSignatures = groupedTimeSignatureEvents.Where(g => g.Count() > 1).ToList();
             if (conflictingTimeSignatures.Any())
             {
-                // TODO: give details...
-                // Messages.Add(details);
-                conflict = true;
+                foreach (var conflict in conflictingTimeSignatures)
+                {
+                    var details = string.Join(", ", conflict.Select(t => $"[{t.TimeSignature}]"));
+                    Messages.Add($"Error: Conflicting signatures {details} at {GetBarInfo(midi, conflict.Key)}");
+                }
+                hasConflict = true;
             }
 
             var groupedTempoEvents = allTempoEvents.
@@ -391,12 +413,15 @@ namespace FlRockBand3
             var conflictingTempos = groupedTempoEvents.Where(g => g.Count() > 1).ToList();
             if (conflictingTempos.Any())
             {
-                // TODO: give details...
-                // Messages.Add(details);
-                conflict = true;
+                foreach (var conflict in conflictingTempos)
+                {
+                    var details = string.Join(", ", conflict.Select(t => $"[{t.Tempo}]"));
+                    Messages.Add($"Error: Conflicting tempos {details} at {GetBarInfo(midi, conflict.Key)}");
+                }
+                hasConflict = true;
             }
 
-            if (conflict)
+            if (hasConflict)
                 throw new InvalidOperationException("Conflicting time signature/tempo events");
 
             var events = new List<MidiEvent>();
@@ -422,7 +447,6 @@ namespace FlRockBand3
             var timeSigTrackNo = midi.FindTrackNumberByName(TrackName.InputTimeSig.ToString());
             if (timeSigTrackNo == -1)
             {
-                // TODO: split Messages into further categories ??
                 Messages.Add($"Info: No '{TrackName.InputTimeSig}' track");
                 return;
             }

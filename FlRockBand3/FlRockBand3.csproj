@@ -52,6 +52,7 @@
     <Compile Include="Exceptions\TrackNotFoundException.cs" />
     <Compile Include="MidiEventCollectionExtensions.cs" />
     <Compile Include="MidiEventExtensions.cs" />
+    <Compile Include="MidiEventLocation.cs" />
     <Compile Include="MidiFixer.cs" />
     <Compile Include="MidiWrapper.cs" />
     <Compile Include="Range.cs" />
