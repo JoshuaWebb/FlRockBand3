@@ -1,4 +1,5 @@
-﻿using NAudio.Midi;
+﻿using System.Collections.Generic;
+using NAudio.Midi;
 
 namespace FlRockBand3
 {
@@ -18,6 +19,23 @@ namespace FlRockBand3
         {
             DrumMixEvent drumMixEvent;
             return DrumMixEvent.TryParse(textEvent, out drumMixEvent) ? drumMixEvent : null;
+        }
+
+        public static IEnumerable<Range<long>> GetRanges(this IEnumerable<TextEvent> events)
+        {
+            using (var iter = events.GetEnumerator())
+            {
+                if (!iter.MoveNext()) yield break;
+                var last = iter.Current;
+
+                while (iter.MoveNext())
+                {
+                    yield return new Range<long>(last.Text, last.AbsoluteTime, iter.Current.AbsoluteTime);
+                    last = iter.Current;
+                }
+
+                yield return new Range<long>(last.Text, last.AbsoluteTime, long.MaxValue);
+            }
         }
     }
 }

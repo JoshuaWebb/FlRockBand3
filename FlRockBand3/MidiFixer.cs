@@ -13,6 +13,9 @@ namespace FlRockBand3
     public class MidiFixer
     {
         private static readonly int Velocity = 96;
+
+        private static readonly int MaxDrumNoteDuration = 120;
+
         // TODO: is this always this?
         private static readonly int TicksInClick = 24;
         private const int No32ndNotesInQuarterNote = 8;
@@ -47,7 +50,7 @@ namespace FlRockBand3
 
             AddDrumMixEvents(midi);
 
-            // TODO: AddDefaultDifficultyEvents(TrackName.Drums, midi);
+            AddDefaultDifficultyEventsDrums(midi);
 
             NormaliseVelocities(midi, Velocity);
 
@@ -158,37 +161,6 @@ namespace FlRockBand3
             }
         }
 
-        private struct Range
-        {
-            public string Name { get; }
-            public long Start { get; }
-            public long End { get; }
-
-            public Range(string name, long start, long end)
-            {
-                Name = name;
-                Start = start;
-                End = end;
-            }
-        }
-
-        private static IEnumerable<Range> GetRanges(IEnumerable<TextEvent> events)
-        {
-            using (var iter = events.GetEnumerator())
-            {
-                if (!iter.MoveNext()) yield break;
-                var last = iter.Current;
-
-                while (iter.MoveNext())
-                {
-                    yield return new Range(last.Text, last.AbsoluteTime, iter.Current.AbsoluteTime);
-                    last = iter.Current;
-                }
-
-                yield return new Range(last.Text, last.AbsoluteTime, long.MaxValue);
-            }
-        }
-
         /// <summary>
         /// Used to specify TextEvents from DAWs/Midi creators that can only use Track Names.
         /// A SequenceTrackName event is used as the Text, and a NoteOn event is used as the time.
@@ -234,8 +206,7 @@ namespace FlRockBand3
                     tracksToRemove.Add(i);
                 }
 
-                var ranges = GetRanges(eventsRequiringConversion);
-                foreach(var range in ranges)
+                foreach(var range in eventsRequiringConversion.GetRanges())
                 {
                     var notes = midi[i].
                         OfType<NoteOnEvent>().
@@ -373,10 +344,10 @@ namespace FlRockBand3
 
             // Fix beat track end
             var newLastEvent = beatTrack.Where(e => !MidiEvent.IsEndTrack(e)).OrderBy(e => e.AbsoluteTime).Last();
-            SetTrackEnd(beatTrack, newLastEvent.AbsoluteTime);
+            UpdateTrackEnd(beatTrack, newLastEvent.AbsoluteTime);
 
             eventsTrack.Add(new TextEvent(EventName.End.ToString(), MetaEventType.TextEvent, lastBeatOn.AbsoluteTime));
-            SetTrackEnd(eventsTrack, lastBeatOn.AbsoluteTime);
+            UpdateTrackEnd(eventsTrack, lastBeatOn.AbsoluteTime);
         }
 
         public void ConsolidateTimeTracks(MidiEventCollection midi)
@@ -501,14 +472,25 @@ namespace FlRockBand3
             // Clean up input track
             midi.RemoveTrack(timeSigTrackNo);
 
-            SetTrackEnd(timeEvents, timeEvents.OrderBy(e => e.AbsoluteTime).Last().AbsoluteTime);
+            UpdateTrackEnd(timeEvents, timeEvents.OrderBy(e => e.AbsoluteTime).Last().AbsoluteTime);
 
             // TODO: If there is no TimeSignatureEvent or TempoEvent at 0, wig out
         }
 
-        private static void SetTrackEnd(ICollection<MidiEvent> events, long absoluteTime)
+        private static void UpdateTrackEnd(ICollection<MidiEvent> events, long? newTime = null)
         {
             var endTrack = events.SingleOrDefault(MidiEvent.IsEndTrack);
+            long absoluteTime;
+            if (newTime == null)
+            {
+                var lastEvent = events.Where(e => !MidiEvent.IsEndTrack(e)).OrderBy(e => e.AbsoluteTime).LastOrDefault();
+                absoluteTime = lastEvent?.AbsoluteTime ?? 0;
+            }
+            else
+            {
+                absoluteTime = newTime.Value;
+            }
+
             if (endTrack == null)
             {
                 events.Add(new MetaEvent(MetaEventType.EndTrack, 0, absoluteTime));
@@ -556,30 +538,30 @@ namespace FlRockBand3
             }
         }
 
-        private static void AddDefaultDifficultyEvents(TrackName track, MidiWrapper midi)
+        public void AddDefaultDifficultyEventsDrums(MidiEventCollection midi)
         {
-            var newEvents = new List<MidiEvent>();
+            var track = midi.GetTrackByName(TrackName.Drums.ToString());
 
-            var defaultOctaves = new[] { DifficultyOctave.Easy, DifficultyOctave.Medium, DifficultyOctave.Hard };
-            var defaultPitches = new[] { Pitch.E, Pitch.DSharp, Pitch.D, Pitch.CSharp, Pitch.C };
+            var notes  = track.OfType<NoteOnEvent>().ToList();
+            var expert = new Range<int>("Expert", 96, 100);
+            var hard   = new Range<int>("Hard", 84, 88);
+            var medium = new Range<int>("Medium", 72, 76);
+            var easy   = new Range<int>("Easy", 60, 64);
 
-            const int duration = 60;
-            const int gap = 12;
-            const int channel = 1;
-            var noteTime = MusicStartTime;
-            foreach (var pitch in defaultPitches)
+            foreach (var range in new[] {easy, medium, hard, expert})
             {
-                foreach (var octave in defaultOctaves)
+                if (notes.Any(n => n.NoteNumber >= range.Start && n.NoteNumber <= range.End))
                 {
-                    var noteOn = new NoteOnEvent(noteTime, channel, NoteHelper.ToNumber(octave, pitch), Velocity, duration);
-                    newEvents.Add(noteOn);
-                    newEvents.Add(noteOn.OffEvent);
+                    Messages.Add($"Info: {TrackName.Drums} already has at least one '{range.Name}' note.");
+                    continue;
                 }
 
-                noteTime += duration + gap;
+                var note = new NoteOnEvent(MusicStartTime, 1, range.Start, Velocity, MaxDrumNoteDuration);
+                track.Add(note);
+                track.Add(note.OffEvent);
             }
 
-            midi.AddEvents(track, newEvents);
+            UpdateTrackEnd(track);
         }
 
         public void RemoveInvalidEventTypes(MidiEventCollection midi)

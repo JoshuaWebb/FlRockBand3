@@ -54,6 +54,7 @@
     <Compile Include="MidiEventExtensions.cs" />
     <Compile Include="MidiFixer.cs" />
     <Compile Include="MidiWrapper.cs" />
+    <Compile Include="Range.cs" />
     <Compile Include="Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -62,7 +63,6 @@
     <Compile Include="Comparer\TempoEventEqualityComparer.cs" />
     <Compile Include="Comparer\TimeSignatureEventEqualityComparer.cs" />
     <Compile Include="TrackName.cs" />
-    <Compile Include="Note.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

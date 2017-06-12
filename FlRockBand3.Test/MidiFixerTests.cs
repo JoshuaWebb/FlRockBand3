@@ -786,6 +786,78 @@ namespace FlRockBand3.Test
         }
 
         [Test]
+        public void TestAddDefaultDifficultyEventsDrumsMissingTrack()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+
+            var fixer = new MidiFixer();
+            var ex = Assert.Throws<TrackNotFoundException>(() => fixer.AddDefaultDifficultyEventsDrums(originalMidi));
+            Assert.AreEqual(TrackName.Drums.ToString(), ex.TrackName);
+        }
+
+        [Test]
+        public void TestAddDefaultDifficultyEventsDrumsNonePresent()
+        {
+            // TODO: oh god the magic numbers
+            var easyNote = new NoteOnEvent(3840, 1, 60, 96, 120);
+            var mediumNote = new NoteOnEvent(3840, 1, 72, 96, 120);
+            var hardNote = new NoteOnEvent(3840, 1, 84, 96, 120);
+            var expertNote = new NoteOnEvent(3840, 1, 96, 96, 120);
+
+            var originalMidi = new MidiEventCollection(1, 200);
+            originalMidi.AddNamedTrack(TrackName.Drums.ToString());
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+
+            expectedMidi.AddNamedTrack(TrackName.Drums.ToString(),
+                easyNote, easyNote.OffEvent,
+                mediumNote, mediumNote.OffEvent,
+                hardNote, hardNote.OffEvent,
+                expertNote, expertNote.OffEvent
+            );
+
+            var fixer = new MidiFixer();
+            fixer.AddDefaultDifficultyEventsDrums(originalMidi);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestAddDefaultDifficultyEventsDrumsSomePresent()
+        {
+            // TODO: oh god the magic numbers
+            var easyNote = new NoteOnEvent(3840, 1, 60, 96, 120);
+            var mediumNote = new NoteOnEvent(6840, 1, 73, 96, 120);
+            var hardNote = new NoteOnEvent(3840, 1, 84, 96, 120);
+            var expertNote = new NoteOnEvent(6840, 1, 98, 96, 120);
+
+            var originalMidi = new MidiEventCollection(1, 200);
+            originalMidi.AddNamedTrackCopy(TrackName.Drums.ToString(),
+                mediumNote, mediumNote.OffEvent,
+                expertNote, expertNote.OffEvent
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddNamedTrackCopy(TrackName.Drums.ToString(),
+                mediumNote, mediumNote.OffEvent,
+                expertNote, expertNote.OffEvent,
+                easyNote, easyNote.OffEvent,
+                hardNote, hardNote.OffEvent
+            );
+
+            var fixer = new MidiFixer();
+            fixer.AddDefaultDifficultyEventsDrums(originalMidi);
+
+            Assert.AreEqual(new []
+            {
+                "Info: PART DRUMS already has at least one 'Medium' note.",
+                "Info: PART DRUMS already has at least one 'Expert' note.",
+            }, fixer.Messages);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
         public void TestProcessTimeSignatures()
         {
             Assert.Fail("TODO");
