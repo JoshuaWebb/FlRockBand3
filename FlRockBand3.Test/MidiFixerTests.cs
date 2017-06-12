@@ -909,21 +909,19 @@ namespace FlRockBand3.Test
         [TestCase(7,  4, 2)]
         [TestCase(8,  4, 2)]
         [TestCase(1,  4, 2)]
-        public void TestProcessValidTimeSignatures(int numerator, int denominator, int expectedDenominator)
+        public void TestProcessTimeSignaturesValid(int numerator, int denominator, int expectedDenominator)
         {
             var originalMidi = new MidiEventCollection(1, 200);
 
-            // channel, velocity, and duration are irrelevant
-            var numeratorNote = new NoteOnEvent(50, 1, numerator, 3, 4);
-            var denominatorNote = new NoteOnEvent(50, 1, denominator, 3, 4);
+            // channel and duration are irrelevant
+            var numeratorNote   = new NoteOnEvent(50, 1, numerator, 10, 4);
+            var denominatorNote = new NoteOnEvent(50, 1, denominator, 5, 4);
 
-            originalMidi.AddTrack(
-                new TextEvent(TrackName.InputTimeSig.ToString(), MetaEventType.SequenceTrackName, 0),
+            originalMidi.AddNamedTrack(TrackName.InputTimeSig.ToString(),
                 numeratorNote,
                 numeratorNote.OffEvent,
                 denominatorNote,
-                denominatorNote.OffEvent,
-                new MetaEvent(MetaEventType.EndTrack, 0, denominatorNote.OffEvent.AbsoluteTime)
+                denominatorNote.OffEvent
             );
 
             var expectedMidi = new MidiEventCollection(1, 200);
@@ -938,25 +936,86 @@ namespace FlRockBand3.Test
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
-
-        [TestCase(1, 1, 1, 1)]
-        [TestCase(1, 2, 3, 4)]
-        [TestCase(2, 1, 4, 3)]
-        public void TestProcessTimeSignaturesIrrelevant(int channel1, int channel2, int velocity, int duration)
+        [Test]
+        public void TestProcessTimeSignaturesOverride()
         {
             var originalMidi = new MidiEventCollection(1, 200);
 
-            // channel, velocity, and duration are irrelevant
-            var numeratorNote = new NoteOnEvent(50, channel1, 4, velocity, duration);
-            var denominatorNote = new NoteOnEvent(50, channel2, 4, velocity, duration);
+            var existingTimeSig = new TimeSignatureEvent(50, 4, 2, 24, 8);
 
-            originalMidi.AddTrack(
-                new TextEvent(TrackName.InputTimeSig.ToString(), MetaEventType.SequenceTrackName, 0),
+            // channel and duration are irrelevant
+            var numeratorNote = new NoteOnEvent(50, 1, 6, 10, 4);
+            var denominatorNote = new NoteOnEvent(50, 1, 8, 5, 4);
+
+            originalMidi.AddNamedTrack(TrackName.TempoMap.ToString(), existingTimeSig);
+
+            originalMidi.AddNamedTrack(TrackName.InputTimeSig.ToString(),
                 numeratorNote,
                 numeratorNote.OffEvent,
                 denominatorNote,
-                denominatorNote.OffEvent,
-                new MetaEvent(MetaEventType.EndTrack, 0, denominatorNote.OffEvent.AbsoluteTime)
+                denominatorNote.OffEvent
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddNamedTrack(TrackName.TempoMap.ToString(),
+                new TimeSignatureEvent(50, 6, 3, 24, 8)
+            );
+
+            var fixer = new MidiFixer();
+            fixer.ProcessTimeSignatures(originalMidi);
+
+            Assert.That(fixer.Messages, Is.Empty);
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestProcessTimeSignaturesMixed()
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+
+            var existingTimeSig = new TimeSignatureEvent(50, 4, 2, 24, 8);
+            // channel and duration are irrelevant
+            var numeratorNote = new NoteOnEvent(100, 1, 6, 10, 4);
+            var denominatorNote = new NoteOnEvent(100, 1, 8, 5, 4);
+
+            originalMidi.AddNamedTrackCopy(TrackName.TempoMap.ToString(), existingTimeSig);
+
+            originalMidi.AddNamedTrack(TrackName.InputTimeSig.ToString(),
+                numeratorNote,
+                numeratorNote.OffEvent,
+                denominatorNote,
+                denominatorNote.OffEvent
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 200);
+            expectedMidi.AddNamedTrackCopy(TrackName.TempoMap.ToString(),
+                existingTimeSig,
+                new TimeSignatureEvent(100, 6, 3, 24, 8)
+            );
+
+            var fixer = new MidiFixer();
+            fixer.ProcessTimeSignatures(originalMidi);
+
+            Assert.That(fixer.Messages, Is.Empty);
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [TestCase(1, 1, 1)]
+        [TestCase(1, 2, 4)]
+        [TestCase(2, 1, 3)]
+        public void TestProcessTimeSignaturesIrrelevant(int channel1, int channel2, int duration)
+        {
+            var originalMidi = new MidiEventCollection(1, 200);
+
+            // channel and duration are irrelevant
+            var numeratorNote   = new NoteOnEvent(50, channel1, 4, 4, duration);
+            var denominatorNote = new NoteOnEvent(50, channel2, 4, 2, duration);
+
+            originalMidi.AddNamedTrack(TrackName.InputTimeSig.ToString(),
+                numeratorNote,
+                numeratorNote.OffEvent,
+                denominatorNote,
+                denominatorNote.OffEvent
             );
 
             var expectedMidi = new MidiEventCollection(1, 200);
@@ -969,6 +1028,135 @@ namespace FlRockBand3.Test
 
             Assert.That(fixer.Messages, Is.Empty);
             MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestProcessTimeSignaturesIncorrectNotEnoughNotes()
+        {
+            var originalMidi = new MidiEventCollection(1, 10);
+
+            // channel, and duration are irrelevant
+            var numeratorNote1   = new NoteOnEvent(50, 1, 7, 1, 1);
+            var denominatorNote2 = new NoteOnEvent(100, 1, 4, 2, 1);
+
+            originalMidi.AddNamedTrack(TrackName.InputTimeSig.ToString(),
+                numeratorNote1,
+                numeratorNote1.OffEvent,
+                denominatorNote2,
+                denominatorNote2.OffEvent
+            );
+
+            var fixer = new MidiFixer();
+            var ex = Assert.Throws<InvalidOperationException>(() => fixer.ProcessTimeSignatures(originalMidi));
+
+            Assert.AreEqual(new []
+            {
+                "Error: Incorrect number of time signature notes at [2:2 in 4/4 (50 ticks)]: <G0 (7), Velocity: 1>",
+                "Error: Incorrect number of time signature notes at [3:3 in 4/4 (100 ticks)]: <E0 (4), Velocity: 2>"
+            }, fixer.Messages);
+
+            Assert.AreEqual("Invalid time signature input", ex.Message);
+        }
+
+        [Test]
+        public void TestProcessTimeSignaturesNoInput()
+        {
+            var tempoEvent = new TempoEvent(600000, 20);
+            var timeSig = new TimeSignatureEvent(10, 1, 1, 24, 8);
+
+            var originalMidi = new MidiEventCollection(1, 10);
+            originalMidi.AddNamedTrackCopy("", tempoEvent);
+            originalMidi.AddNamedTrackCopy("", timeSig);
+
+            var expectedMidi = new MidiEventCollection(1, 10);
+            expectedMidi.AddNamedTrack(TrackName.TempoMap.ToString(), timeSig, tempoEvent);
+
+            var fixer = new MidiFixer();
+            fixer.ProcessTimeSignatures(originalMidi);
+
+            Assert.AreEqual(new[] { "Info: No 'timesig' track"}, fixer.Messages);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestProcessTimeSignaturesSameVelocity()
+        {
+            var originalMidi = new MidiEventCollection(1, 10);
+
+            // channel, and duration are irrelevant
+            var numeratorNote1 = new NoteOnEvent(50, 1, 7, 40, 1);
+            var denominatorNote1 = new NoteOnEvent(50, 1, 4, 40, 1);
+            var numeratorNote2 = new NoteOnEvent(100, 1, 7, 40, 1);
+            var denominatorNote2 = new NoteOnEvent(100, 1, 4, 40, 1);
+
+            originalMidi.AddNamedTrack(TrackName.InputTimeSig.ToString(),
+                numeratorNote1,
+                numeratorNote1.OffEvent,
+                denominatorNote1,
+                denominatorNote1.OffEvent,
+                numeratorNote2,
+                numeratorNote2.OffEvent,
+                denominatorNote2,
+                denominatorNote2.OffEvent
+            );
+
+            var fixer = new MidiFixer();
+            var ex = Assert.Throws<InvalidOperationException>(() => fixer.ProcessTimeSignatures(originalMidi));
+
+            Assert.AreEqual(new[]
+            {
+                "Error: Multiple notes with the same velocity at [2:2 in 4/4 (50 ticks)]:"
+                    + " <G0 (7), Velocity: 40>, <E0 (4), Velocity: 40>",
+                "Error: Multiple notes with the same velocity at [3:3 in 4/4 (100 ticks)]:"
+                    + " <G0 (7), Velocity: 40>, <E0 (4), Velocity: 40>"
+            }, fixer.Messages);
+
+            Assert.AreEqual("Invalid time signature input", ex.Message);
+        }
+
+        [Test]
+        public void TestProcessTimeSignaturesIncorrectTooManyNotes()
+        {
+            var originalMidi = new MidiEventCollection(1, 10);
+
+            // channel, and duration are irrelevant
+            var numeratorNote1   = new NoteOnEvent(50, 1, 7, 3, 1);
+            var denominatorNote1 = new NoteOnEvent(50, 1, 4, 2, 1);
+            var thirdNote1       = new NoteOnEvent(50, 1, 5, 1, 1);
+
+            var numeratorNote2   = new NoteOnEvent(100, 1, 7, 3, 1);
+            var denominatorNote2 = new NoteOnEvent(100, 1, 4, 2, 1);
+            var thirdNote2       = new NoteOnEvent(100, 1, 5, 1, 1);
+
+            originalMidi.AddNamedTrack(TrackName.InputTimeSig.ToString(),
+                numeratorNote1,
+                numeratorNote1.OffEvent,
+                denominatorNote1,
+                denominatorNote1.OffEvent,
+                thirdNote1,
+                thirdNote1.OffEvent,
+
+                numeratorNote2,
+                numeratorNote2.OffEvent,
+                denominatorNote2,
+                denominatorNote2.OffEvent,
+                thirdNote2,
+                thirdNote2.OffEvent
+            );
+
+            var fixer = new MidiFixer();
+            var ex = Assert.Throws<InvalidOperationException>(() => fixer.ProcessTimeSignatures(originalMidi));
+
+            Assert.AreEqual(new[]
+            {
+                "Error: Incorrect number of time signature notes at [2:2 in 4/4 (50 ticks)]:"
+                    + " <G0 (7), Velocity: 3>, <E0 (4), Velocity: 2>, <F0 (5), Velocity: 1>",
+                "Error: Incorrect number of time signature notes at [3:3 in 4/4 (100 ticks)]:"
+                    + " <G0 (7), Velocity: 3>, <E0 (4), Velocity: 2>, <F0 (5), Velocity: 1>"
+            }, fixer.Messages);
+
+            Assert.AreEqual("Invalid time signature input", ex.Message);
         }
 
         // TODO: multiple events are allowed, but not multiple events of the same type

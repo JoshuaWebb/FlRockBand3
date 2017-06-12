@@ -438,7 +438,6 @@ namespace FlRockBand3
                 midi.RemoveTrack(trackNumber);
         }
 
-        // TODO: test this guy
         public void ProcessTimeSignatures(MidiEventCollection midi)
         {
             // This is way easier if these have already been consolidated
@@ -466,9 +465,16 @@ namespace FlRockBand3
                 if (sorted.Length != 2)
                 {
                     error = true;
-                    // TODO: convert to proper bar/time info... absolute time in ticks doesn't really help.
-                    var detail = string.Join(", ", sorted.Select(e => e.ToString()));
-                    Messages.Add($"Error: Incorrect number of time signature notes at {time}, {detail}");
+                    var detail = string.Join(", ", sorted.Select(e => $"<{e.NoteName} ({e.NoteNumber}), Velocity: {e.Velocity}>"));
+                    Messages.Add($"Error: Incorrect number of time signature notes at {GetBarInfo(midi, time)}: {detail}");
+                    continue;
+                }
+
+                if (sorted[0].Velocity == sorted[1].Velocity)
+                {
+                    error = true;
+                    var detail = string.Join(", ", sorted.Select(e => $"<{e.NoteName} ({e.NoteNumber}), Velocity: {e.Velocity}>"));
+                    Messages.Add($"Error: Multiple notes with the same velocity at {GetBarInfo(midi, time)}: {detail}");
                     continue;
                 }
 
