@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using NAudio.Midi;
 
 namespace FlRockBand3
@@ -36,6 +37,12 @@ namespace FlRockBand3
 
                 yield return new Range<long>(last.Text, last.AbsoluteTime, long.MaxValue);
             }
+        }
+
+        public static TextEvent FindFirstTextEvent(this IEnumerable<MidiEvent> track, string text)
+        {
+            return track.OfType<TextEvent>().OrderBy(e => e.AbsoluteTime)
+                .FirstOrDefault(e => e.MetaEventType == MetaEventType.TextEvent && e.Text == text);
         }
     }
 }

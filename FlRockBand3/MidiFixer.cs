@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -43,8 +44,11 @@ namespace FlRockBand3
 
             ProcessTimeSignatures(midi);
 
-            // TODO: Add [music_start] / [music_end] event if they don't exist
             ConvertLastBeatToEnd(midi);
+
+            AddMusicEndEvent(midi);
+
+            AddMusicStartEvent(midi);
 
             ValidateBeatTrack(midi);
 
@@ -62,6 +66,42 @@ namespace FlRockBand3
             MidiFile.Export(outPath, midi);
         }
 
+        public void AddMusicStartEvent(MidiEventCollection midi)
+        {
+            var time = ThirdBarTime(midi);
+            AddEventIfItDoesNotExist(midi, EventName.MusicStart.ToString(), time);
+        }
+
+        public void AddMusicEndEvent(MidiEventCollection midi)
+        {
+            var eventsTrack =  midi.GetTrackByName(TrackName.Events.ToString());
+            var endEvent = eventsTrack.FindFirstTextEvent(EventName.End.ToString());
+            Debug.Assert(endEvent != null);
+
+            // TODO: move slightly earlier than the end ??
+            AddEventIfItDoesNotExist(midi, EventName.MusicEnd.ToString(), endEvent.AbsoluteTime);
+        }
+
+        private void AddEventIfItDoesNotExist(MidiEventCollection midi, string eventName, long time)
+        {
+            var eventsTrack = midi.GetTrackByName(TrackName.Events.ToString());
+            var existingEvent = eventsTrack.FindFirstTextEvent(eventName);
+            if (existingEvent != null)
+            {
+                Messages.Add($"Info: {eventName} event already exists at {GetBarInfo(midi, existingEvent)}");
+                return;
+            }
+
+            var newEvent = new TextEvent(eventName, MetaEventType.TextEvent, time);
+            Messages.Add($"Info: Adding {eventName} event at {GetBarInfo(midi, newEvent)}");
+            eventsTrack.Add(newEvent);
+        }
+
+        public static MidiEventLocation GetBarInfo(MidiEventCollection midi, MidiEvent midiEvent)
+        {
+            return GetBarInfo(midi, midiEvent.AbsoluteTime);
+        }
+
         private static MidiEventLocation GetBarInfo(MidiEventCollection midi, long absoluteTime)
         {
             var ppq = midi.DeltaTicksPerQuarterNote;
@@ -73,11 +113,6 @@ namespace FlRockBand3
             var fourFourBeat = ((int)totalQuarterNote % beatsPerBar) + 1;
             var fourFourTicks = (int)(absoluteTime % ppq);
             return new MidiEventLocation(absoluteTime, fourFourBar, fourFourBeat, fourFourTicks);
-        }
-
-        public static MidiEventLocation GetBarInfo(MidiEventCollection midi, MidiEvent midiEvent)
-        {
-            return GetBarInfo(midi, midiEvent.AbsoluteTime);
         }
 
         public static IEnumerable<string> LoadPracticeSections()
@@ -343,13 +378,10 @@ namespace FlRockBand3
             var eventsTrack = midi.FindTrackByName(TrackName.Events.ToString());
             if (eventsTrack != null)
             {
-                var alreadyHasEnd = eventsTrack.
-                    OfType<TextEvent>().
-                    Any(e => e.MetaEventType == MetaEventType.TextEvent && e.Text == EventName.End.ToString());
-
-                if (alreadyHasEnd)
+                var existingEvent = eventsTrack.FindFirstTextEvent(EventName.End.ToString());
+                if (existingEvent != null)
                 {
-                    Messages.Add($"{EventName.End} event already exists, left last beat alone.");
+                    Messages.Add($"Info: {EventName.End} event already exists at {GetBarInfo(midi, existingEvent)}, left last beat in place.");
                     return;
                 }
             }
@@ -568,6 +600,11 @@ namespace FlRockBand3
             }
         }
 
+        private static int ThirdBarTime(MidiEventCollection midi)
+        {
+            return 2 * 4 * midi.DeltaTicksPerQuarterNote;
+        }
+
         public void AddDefaultDifficultyEventsDrums(MidiEventCollection midi)
         {
             var track = midi.GetTrackByName(TrackName.Drums.ToString());
@@ -586,7 +623,7 @@ namespace FlRockBand3
                     continue;
                 }
 
-                var note = new NoteOnEvent(MusicStartTime, 1, range.Start, Velocity, MaxDrumNoteDuration);
+                var note = new NoteOnEvent(ThirdBarTime(midi), 1, range.Start, Velocity, MaxDrumNoteDuration);
                 track.Add(note);
                 track.Add(note.OffEvent);
             }

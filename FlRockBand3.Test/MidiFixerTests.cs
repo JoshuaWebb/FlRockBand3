@@ -742,7 +742,7 @@ namespace FlRockBand3.Test
             var fixer = new MidiFixer();
             fixer.ConvertLastBeatToEnd(originalMidi);
 
-            Assert.AreEqual(new [] { "[end] event already exists, left last beat alone." }, fixer.Messages);
+            Assert.AreEqual(new [] { "Info: [end] event already exists at [1:3 in 4/4 (500 ticks)], left last beat in place." }, fixer.Messages);
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
 
@@ -812,11 +812,14 @@ namespace FlRockBand3.Test
         [Test]
         public void TestAddDefaultDifficultyEventsDrumsNonePresent()
         {
-            // TODO: oh god the magic numbers
-            var easyNote = new NoteOnEvent(3840, 1, 60, 96, 120);
-            var mediumNote = new NoteOnEvent(3840, 1, 72, 96, 120);
-            var hardNote = new NoteOnEvent(3840, 1, 84, 96, 120);
-            var expertNote = new NoteOnEvent(3840, 1, 96, 96, 120);
+            var ppq = 200;
+            // 2 bars of 4 quarter notes * ppq
+            var countIn = 1600;
+
+            var easyNote = new NoteOnEvent(countIn, 1, 60, 96, 120);
+            var mediumNote = new NoteOnEvent(countIn, 1, 72, 96, 120);
+            var hardNote = new NoteOnEvent(countIn, 1, 84, 96, 120);
+            var expertNote = new NoteOnEvent(countIn, 1, 96, 96, 120);
 
             var originalMidi = new MidiEventCollection(1, 200);
             originalMidi.AddNamedTrack(TrackName.Drums.ToString());
@@ -839,10 +842,13 @@ namespace FlRockBand3.Test
         [Test]
         public void TestAddDefaultDifficultyEventsDrumsSomePresent()
         {
-            // TODO: oh god the magic numbers
-            var easyNote = new NoteOnEvent(3840, 1, 60, 96, 120);
+            var ppq = 200;
+            // 2 bars of 4 quarter notes * ppq
+            var countIn = 1600;
+
+            var easyNote = new NoteOnEvent(countIn, 1, 60, 96, 120);
             var mediumNote = new NoteOnEvent(6840, 1, 73, 96, 120);
-            var hardNote = new NoteOnEvent(3840, 1, 84, 96, 120);
+            var hardNote = new NoteOnEvent(countIn, 1, 84, 96, 120);
             var expertNote = new NoteOnEvent(6840, 1, 98, 96, 120);
 
             var originalMidi = new MidiEventCollection(1, 200);
