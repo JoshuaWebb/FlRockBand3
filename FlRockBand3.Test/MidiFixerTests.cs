@@ -150,7 +150,8 @@ namespace FlRockBand3.Test
             originalMidi.AddTrackCopy(notes.Skip(maxVelocity / 2).SelectMany(n => new[] { n, n.OffEvent }));
 
             const int normalisedVelocity = 100;
-            MidiFixer.NormaliseVelocities(originalMidi, normalisedVelocity);
+            var fixer = new MidiFixer();
+            fixer.NormaliseVelocities(originalMidi, normalisedVelocity);
 
             Assert.That(originalMidi.OfType<NoteOnEvent>(), Has.All.Property(nameof(NoteEvent.Velocity)).EqualTo(normalisedVelocity));
             Assert.That(originalMidi.SelectMany(t => t).Where(MidiEvent.IsNoteOff), Has.All.Property(nameof(NoteEvent.Velocity)).EqualTo(0));
