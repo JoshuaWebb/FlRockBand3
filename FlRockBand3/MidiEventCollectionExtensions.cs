@@ -48,7 +48,18 @@ namespace FlRockBand3
 
         public static IList<MidiEvent> AddNamedTrackCopy(this MidiEventCollection midiEventCollection, string name, IEnumerable<MidiEvent> initialEvents)
         {
-            return AddNamedTrack(midiEventCollection, name, initialEvents.Select(e => e.Clone()));
+            var nameEvent = new TextEvent(name, MetaEventType.SequenceTrackName, 0);
+
+            var track = AddTrackCopy(midiEventCollection, new [] { nameEvent }.Concat(initialEvents));
+
+            var endEvent = track.OfType<MetaEvent>().Where(MidiEvent.IsEndTrack).SingleOrDefault();
+            if (endEvent == null)
+            {
+                var lastEvent = track.OrderBy(e => e.AbsoluteTime).Last();
+                track.Add(new MetaEvent(MetaEventType.EndTrack, 0, lastEvent.AbsoluteTime));
+            }
+
+            return track;
         }
 
         public static IList<MidiEvent> AddNamedTrack(this MidiEventCollection midiEventCollection, string name, params MidiEvent[] initialEvents)
@@ -80,15 +91,33 @@ namespace FlRockBand3
 
         public static IList<MidiEvent> AddTrackCopy(this MidiEventCollection midiEventCollection, IEnumerable<MidiEvent> initialEvents)
         {
-            return midiEventCollection.AddTrack(initialEvents.Select(e => e.Clone()));
-        }
+            var initialEventsList = initialEvents.ToList();
+            if (initialEventsList.GroupBy(e => e).Any(g => g.Count() > 1))
+                throw new ArgumentException("Must not contain duplicate events", nameof(initialEventsList));
 
-        public static IList<MidiEvent> AddTrack(this MidiEventCollection midiEventCollection, IEnumerable<MidiEvent> initialEvents)
-        {
-            var newTrack = midiEventCollection.AddTrack();
-            foreach (var midiEvent in initialEvents)
-                newTrack.Add(midiEvent);
+            var clonedEvents = new MidiEvent[initialEventsList.Count];
+            for (var e = 0; e < initialEventsList.Count; e++)
+            {
+                var midiEvent = initialEventsList[e];
+                var clone = midiEvent.Clone();
 
+                var noteEvent = midiEvent as NoteEvent;
+                if (noteEvent != null)
+                {
+                    var noteOnEvent = noteEvent as NoteOnEvent;
+                    // NoteOff events are set at the same time as their NoteOnEvent
+                    if (noteOnEvent == null) continue;
+
+                    var clonedOff = ((NoteOnEvent)clone).OffEvent;
+                    var offEventIndex = initialEventsList.FindIndex(m => m == noteOnEvent.OffEvent);
+                    if (offEventIndex != -1)
+                        clonedEvents[offEventIndex] = clonedOff;
+                }
+
+                clonedEvents[e] = clone;
+            }
+
+            var newTrack = midiEventCollection.AddTrack(clonedEvents);
             return newTrack;
         }
 

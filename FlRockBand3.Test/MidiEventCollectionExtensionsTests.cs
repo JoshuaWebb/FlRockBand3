@@ -1,4 +1,5 @@
-﻿using NAudio.Midi;
+﻿using System;
+using NAudio.Midi;
 using NUnit.Framework;
 
 namespace FlRockBand3.Test
@@ -179,6 +180,9 @@ namespace FlRockBand3.Test
             var extensionTrack = extensionMidi[0];
             for (var e = 0; e < manualTrack.Count; e++)
                 Assert.That(extensionTrack[e], Is.Not.SameAs(manualTrack[e]));
+
+            // Verify the NoteOnEvent.OffEvent link
+            Assert.AreEqual(extensionMidi[0][2], ((NoteOnEvent)extensionMidi[0][1]).OffEvent);
         }
 
         [Test]
@@ -206,6 +210,9 @@ namespace FlRockBand3.Test
             var extensionTrack = extensionMidi[0];
             for (var e = 0; e < manualTrack.Count; e++)
                 Assert.That(extensionTrack[e], Is.Not.SameAs(manualTrack[e]));
+
+            // Verify the NoteOnEvent.OffEvent link
+            Assert.AreEqual(extensionMidi[0][2], ((NoteOnEvent)extensionMidi[0][1]).OffEvent);
         }
 
         [Test]
@@ -234,6 +241,9 @@ namespace FlRockBand3.Test
             var extensionTrack = extensionMidi[0];
             for (var e = 0; e < manualTrack.Count; e++)
                 Assert.That(extensionTrack[e], Is.Not.SameAs(manualTrack[e]));
+
+            // Verify the NoteOnEvent.OffEvent link
+            Assert.AreEqual(extensionMidi[0][2], ((NoteOnEvent)extensionMidi[0][1]).OffEvent);
         }
 
         [Test]
@@ -262,6 +272,90 @@ namespace FlRockBand3.Test
             var extensionTrack = extensionMidi[0];
             for (var e = 0; e < manualTrack.Count; e++)
                 Assert.That(extensionTrack[e], Is.Not.SameAs(manualTrack[e]));
+
+            // Verify the NoteOnEvent.OffEvent link
+            Assert.AreEqual(extensionMidi[0][2], ((NoteOnEvent)extensionMidi[0][1]).OffEvent);
+        }
+
+        [Test]
+        public void TestAddTrackCopy()
+        {
+            var manualMidi = new MidiEventCollection(1, 200);
+            var noteEvent = new NoteOnEvent(0, 1, 1, 1, 1);
+
+            var track = manualMidi.AddTrack();
+            track.Add(noteEvent);
+            track.Add(noteEvent.OffEvent);
+
+            var extensionMidi = new MidiEventCollection(1, 200);
+            var events = new MidiEvent[] { noteEvent, noteEvent.OffEvent };
+            extensionMidi.AddTrackCopy(events);
+
+            MidiAssert.Equal(manualMidi, extensionMidi);
+
+            // Assert they aren't the same objects
+            var manualTrack = manualMidi[0];
+            var extensionTrack = extensionMidi[0];
+            for (var e = 0; e < manualTrack.Count; e++)
+                Assert.That(extensionTrack[e], Is.Not.SameAs(manualTrack[e]));
+
+            // Verify the NoteOnEvent.OffEvent link
+            Assert.AreEqual(extensionMidi[0][1], ((NoteOnEvent)extensionMidi[0][0]).OffEvent);
+        }
+
+        [Test]
+        public void TestAddTrackCopyParams()
+        {
+            var manualMidi = new MidiEventCollection(1, 200);
+            var noteEvent = new NoteOnEvent(0, 1, 1, 1, 1);
+
+            var track = manualMidi.AddTrack();
+            track.Add(noteEvent);
+            track.Add(noteEvent.OffEvent);
+
+            var extensionMidi = new MidiEventCollection(1, 200);
+            extensionMidi.AddTrackCopy(noteEvent, noteEvent.OffEvent);
+
+            MidiAssert.Equal(manualMidi, extensionMidi);
+
+            // Assert they aren't the same objects
+            var manualTrack = manualMidi[0];
+            var extensionTrack = extensionMidi[0];
+            for (var e = 0; e < manualTrack.Count; e++)
+                Assert.That(extensionTrack[e], Is.Not.SameAs(manualTrack[e]));
+
+            // Verify the NoteOnEvent.OffEvent link
+            Assert.AreEqual(extensionMidi[0][1], ((NoteOnEvent)extensionMidi[0][0]).OffEvent);
+        }
+
+        [Test]
+        public void TestAddTrackCopyNoOffEvent()
+        {
+            var manualMidi = new MidiEventCollection(1, 200);
+            var noteEvent = new NoteOnEvent(0, 1, 1, 1, 1);
+
+            var track = manualMidi.AddTrack();
+            track.Add(noteEvent);
+
+            var extensionMidi = new MidiEventCollection(1, 200);
+            extensionMidi.AddTrackCopy(noteEvent);
+
+            MidiAssert.Equal(manualMidi, extensionMidi);
+
+            // Assert they aren't the same objects
+            var manualTrack = manualMidi[0];
+            var extensionTrack = extensionMidi[0];
+            for (var e = 0; e < manualTrack.Count; e++)
+                Assert.That(extensionTrack[e], Is.Not.SameAs(manualTrack[e]));
+        }
+
+        [Test]
+        public void TestAddTrackCopyDuplicateEvents()
+        {
+            var noteEvent = new NoteOnEvent(0, 1, 1, 1, 1);
+            var extensionMidi = new MidiEventCollection(1, 200);
+            var events = new MidiEvent[] {noteEvent, noteEvent.OffEvent, noteEvent, noteEvent.OffEvent};
+            Assert.Throws<ArgumentException>(() => extensionMidi.AddTrackCopy(events));
         }
     }
 }

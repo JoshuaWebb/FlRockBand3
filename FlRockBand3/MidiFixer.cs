@@ -58,12 +58,35 @@ namespace FlRockBand3
 
             NormaliseVelocities(midi, Velocity);
 
+            RemoveDuplicateNotes(midi);
+
             // Do towards the end in case other processes require "invalid" events
             RemoveInvalidEventTypes(midi);
 
             AddVenueTrack(midi);
 
             MidiFile.Export(outPath, midi);
+        }
+
+        public void RemoveDuplicateNotes(MidiEventCollection midi)
+        {
+            for (var t = 0; t < midi.Tracks; t++)
+            {
+                var track = midi[t];
+                var existingElements = new HashSet<NoteOnEvent>(new NoteEventEqualityComparer());
+                var notesToRemove = new List<NoteOnEvent>();
+                foreach (var noteOnEvent in track.OfType<NoteOnEvent>())
+                {
+                    if (!existingElements.Add(noteOnEvent))
+                        notesToRemove.Add(noteOnEvent);
+                }
+
+                foreach(var note in notesToRemove)
+                {
+                    track.Remove(note.OffEvent);
+                    track.Remove(note);
+                }
+            }
         }
 
         public void AddMusicStartEvent(MidiEventCollection midi)

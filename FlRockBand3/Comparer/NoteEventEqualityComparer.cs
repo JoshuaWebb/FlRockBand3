@@ -10,7 +10,11 @@ namespace FlRockBand3.Comparer
             if (ReferenceEquals(x, y)) return true;
             if (x == null || y == null) return false;
 
-            if (MidiEvent.IsNoteOn(x) != MidiEvent.IsNoteOn(y)) return false;
+            var noteOnX = x as NoteOnEvent;
+            var noteOnY = y as NoteOnEvent;
+            if (noteOnX == null ^ noteOnY == null) return false;
+            if (noteOnX?.OffEvent.AbsoluteTime != noteOnY?.OffEvent.AbsoluteTime) return false;
+
             if (x.AbsoluteTime != y.AbsoluteTime) return false;
             if (x.NoteNumber != y.NoteNumber) return false;
             if (x.Channel != y.Channel) return false;

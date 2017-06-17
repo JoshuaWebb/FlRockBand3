@@ -99,7 +99,7 @@ namespace FlRockBand3.Test
             MidiAssert.Equal(expectedMidi, actualMidi);
 
             // Verify the NoteOnEvent.OffEvent link
-            Assert.AreEqual(expectedMidi[0][1], ((NoteOnEvent)expectedMidi[0][0]).OffEvent);
+            Assert.AreEqual(actualMidi[0][1], ((NoteOnEvent)actualMidi[0][0]).OffEvent);
         }
 
         [Test]
@@ -125,8 +125,8 @@ namespace FlRockBand3.Test
                 ToList();
 
             // split over multiple tracks
-            originalMidi.AddTrack(notes.Take(maxVelocity / 2));
-            originalMidi.AddTrack(notes.Skip(maxVelocity / 2));
+            originalMidi.AddTrackCopy(notes.Take(maxVelocity / 2).SelectMany(n => new[] { n, n.OffEvent }));
+            originalMidi.AddTrackCopy(notes.Skip(maxVelocity / 2).SelectMany(n => new[] { n, n.OffEvent }));
 
             const int normalisedVelocity = 100;
             MidiFixer.NormaliseVelocities(originalMidi, normalisedVelocity);
@@ -1163,6 +1163,74 @@ namespace FlRockBand3.Test
             }, fixer.Messages);
 
             Assert.AreEqual("Invalid time signature input", ex.Message);
+        }
+
+        [Test]
+        public void TestRemoveDuplicateNotesIgnoreOnDifferentTracks()
+        {
+            var originalMidi = new MidiEventCollection(1, 10);
+            var note = new NoteOnEvent(100, 1, 1, 10, 10);
+            originalMidi.AddNamedTrackCopy("", note, note.OffEvent);
+            originalMidi.AddNamedTrackCopy("", note, note.OffEvent);
+
+            var expectedMidi = new MidiEventCollection(1, 10);
+            expectedMidi.AddNamedTrackCopy("", note, note.OffEvent);
+            expectedMidi.AddNamedTrackCopy("", note, note.OffEvent);
+
+            var fixer = new MidiFixer();
+            fixer.RemoveDuplicateNotes(originalMidi);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [Test]
+        public void TestRemoveDuplicateNotesRemoveOnSameTrack()
+        {
+            var originalMidi = new MidiEventCollection(1, 10);
+            var note = new NoteOnEvent(100, 1, 1, 10, 10);
+            var duplicateNote = (NoteOnEvent)note.Clone();
+            originalMidi.AddNamedTrackCopy("",
+                note, note.OffEvent,
+                duplicateNote, duplicateNote.OffEvent
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 10);
+            expectedMidi.AddNamedTrackCopy("", note, note.OffEvent);
+
+            var fixer = new MidiFixer();
+            fixer.RemoveDuplicateNotes(originalMidi);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
+        }
+
+        [TestCase(200, 1, 1, 10, 10)]
+        [TestCase(100, 2, 1, 10, 10)]
+        [TestCase(100, 1, 2, 10, 10)]
+        [TestCase(100, 1, 1, 20, 10)]
+        [TestCase(100, 1, 1, 10, 20)]
+        [TestCase(200, 2, 2, 20, 20)]
+        public void TestRemoveDuplicateNotesKeepDifferentNotes(
+            int time, int channel, int number, int velocity, int duration)
+        {
+            var originalMidi = new MidiEventCollection(1, 10);
+            var name = "name";
+            var note = new NoteOnEvent(100, 1, 1, 10, 10);
+            var otherNote = new NoteOnEvent(time, channel, number, velocity, duration);
+            originalMidi.AddNamedTrackCopy(name,
+                note, note.OffEvent,
+                otherNote, otherNote.OffEvent
+            );
+
+            var expectedMidi = new MidiEventCollection(1, 10);
+            expectedMidi.AddNamedTrackCopy(name,
+                note, note.OffEvent,
+                otherNote, otherNote.OffEvent
+            );
+
+            var fixer = new MidiFixer();
+            fixer.RemoveDuplicateNotes(originalMidi);
+
+            MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
         // TODO: multiple events are allowed, but not multiple events of the same type
