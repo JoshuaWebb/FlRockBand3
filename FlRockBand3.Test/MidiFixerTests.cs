@@ -103,6 +103,27 @@ namespace FlRockBand3.Test
         }
 
         [Test]
+        public void TestUpdatePpqNoOffEvent()
+        {
+            var originalMidi = new MidiEventCollection(1, 100);
+            var expectedMidi = new MidiEventCollection(1, 200);
+
+            var originalNoteOn = new NoteOnEvent(10, 1, 1, 50, 40);
+            var expectedNoteOn = new NoteOnEvent(20, 1, 1, 50, 80);
+            originalMidi.AddTrack(originalNoteOn);
+            expectedMidi.AddTrack(expectedNoteOn);
+
+            // Create a brand new copy of the original midi so we can verify it wasn't modified
+            var inputMidi = originalMidi.Clone();
+
+            var fixer = new MidiFixer();
+            var actualMidi = fixer.UpdatePpq(inputMidi, 200);
+
+            MidiAssert.Equal(originalMidi, inputMidi);
+            MidiAssert.Equal(expectedMidi, actualMidi);
+        }
+
+        [Test]
         public void TestNormaliseVelocities()
         {
             const int maxVelocity = sbyte.MaxValue;
