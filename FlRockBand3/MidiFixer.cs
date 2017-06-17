@@ -58,9 +58,27 @@ namespace FlRockBand3
             // Do towards the end in case other processes require "invalid" events
             RemoveInvalidEventTypes(midi);
 
+            midi = ReorderTracks(midi);
+
             AddVenueTrack(midi);
 
             MidiFile.Export(outPath, midi);
+        }
+
+        public MidiEventCollection ReorderTracks(MidiEventCollection midi)
+        {
+            var newMidi = new MidiEventCollection(midi.MidiFileType, midi.DeltaTicksPerQuarterNote);
+            var tempoMapIndex = midi.FindTrackNumberByName(TrackName.TempoMap.ToString());
+
+            newMidi.AddTrack(midi[tempoMapIndex]);
+
+            for (var t = 0; t < midi.Tracks; t++)
+            {
+                if (t != tempoMapIndex)
+                    newMidi.AddTrack(midi[t]);
+            }
+
+            return newMidi;
         }
 
         public void RemoveDuplicateNotes(MidiEventCollection midi)
