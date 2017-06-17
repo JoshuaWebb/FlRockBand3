@@ -189,37 +189,22 @@ namespace FlRockBand3
 
         public MidiEventCollection UpdatePpq(MidiEventCollection midi, int newPpq)
         {
-            var comparer = new NoteEventEqualityComparer();
             var newMidi = new MidiEventCollection(midi.MidiFileType, newPpq);
             var multiplier = (double)newPpq / midi.DeltaTicksPerQuarterNote;
             for (var track = 0; track < midi.Tracks; track++)
             {
-                var midiEvents = midi[track] as List<MidiEvent> ?? midi[track].ToList();
-                var shiftedEvents = new MidiEvent[midiEvents.Count];
-                for (var e = 0; e < midiEvents.Count; e++)
+                var newTrack = newMidi.AddTrackCopy(midi[track]);
+                var shifted = new HashSet<MidiEvent>();
+                foreach (var clonedEvent in newTrack)
                 {
-                    var midiEvent = midiEvents[e];
-                    var shiftedEvent = midiEvent.Clone();
+                    if (shifted.Add(clonedEvent))
+                        clonedEvent.AbsoluteTime = (long) (clonedEvent.AbsoluteTime * multiplier);
 
-                    var noteEvent = midiEvent as NoteEvent;
-                    if (noteEvent != null)
-                    {
-                        var noteOnEvent = noteEvent as NoteOnEvent;
-                        // NoteOff events are shifted when the NoteOn is shifted
-                        if (noteOnEvent == null) continue;
-
-                        var clonedNote = (NoteOnEvent) shiftedEvent;
-                        var clonedOff = clonedNote.OffEvent;
-                        clonedOff.AbsoluteTime = (long) (clonedOff.AbsoluteTime * multiplier);
-                        var offEventIndex = midiEvents.FindIndex(m => comparer.Equals(m as NoteEvent, noteOnEvent.OffEvent));
-                        shiftedEvents[offEventIndex] = clonedOff;
-                    }
-
-                    shiftedEvent.AbsoluteTime = (long)(shiftedEvent.AbsoluteTime * multiplier);
-                    shiftedEvents[e] = shiftedEvent;
+                    // Make sure that we shift the off event whether it is in the track or not.
+                    var offEvent = (clonedEvent as NoteOnEvent)?.OffEvent;
+                    if (offEvent != null && shifted.Add(offEvent))
+                        offEvent.AbsoluteTime = (long)(offEvent.AbsoluteTime * multiplier);
                 }
-
-                newMidi.AddTrack(shiftedEvents);
             }
 
             return newMidi;
