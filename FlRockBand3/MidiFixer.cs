@@ -13,16 +13,11 @@ namespace FlRockBand3
 {
     public class MidiFixer
     {
-        private static readonly int Velocity = 96;
-
-        private static readonly int MaxDrumNoteDuration = 120;
+        private static readonly int DefaultVelocity = 96;
 
         // TODO: is this always this?
         private static readonly int TicksInClick = 24;
         private const int No32ndNotesInQuarterNote = 8;
-
-        // 2 bars worth of 4/4 count-in
-        private static readonly int MusicStartTime = 3840;
 
         private const ushort PulsesPerQuarterNote = 480;
 
@@ -56,7 +51,7 @@ namespace FlRockBand3
 
             AddDefaultDifficultyEventsDrums(midi);
 
-            NormaliseVelocities(midi, Velocity);
+            NormaliseVelocities(midi, DefaultVelocity);
 
             RemoveDuplicateNotes(midi);
 
@@ -140,6 +135,7 @@ namespace FlRockBand3
 
         public static IEnumerable<string> LoadPracticeSections()
         {
+            // TODO: log which practice sections we're using
             string practiceSections;
             try
             {
@@ -147,7 +143,6 @@ namespace FlRockBand3
             }
             catch (IOException ioe)
             {
-                // TODO: log message that we're using default practice sections
                 practiceSections = Resources.All_Practice_Sections;
             }
 
@@ -162,7 +157,7 @@ namespace FlRockBand3
                 if (line.StartsWith("#"))
                     continue;
 
-                // [prc_k9] "K section 9"
+                // example: [prc_k9] "K section 9"
                 var parts = line.Split(new [] { ' ' }, 2);
                 if (parts[0].StartsWith("[") && parts[0].EndsWith("]"))
                 {
@@ -402,7 +397,7 @@ namespace FlRockBand3
             beatTrack.Remove(lastBeatOn.OffEvent);
 
             // Fix beat track end
-            var newLastEvent = beatTrack.Where(e => !MidiEvent.IsEndTrack(e)).OrderBy(e => e.AbsoluteTime).Last();
+            var newLastEvent = beatTrack.OfType<NoteEvent>().OrderBy(e => e.AbsoluteTime).Last();
             UpdateTrackEnd(beatTrack, newLastEvent.AbsoluteTime);
 
             eventsTrack.Add(new TextEvent(EventName.End.ToString(), MetaEventType.TextEvent, lastBeatOn.AbsoluteTime));
@@ -631,7 +626,9 @@ namespace FlRockBand3
                     continue;
                 }
 
-                var note = new NoteOnEvent(ThirdBarTime(midi), 1, range.Start, Velocity, MaxDrumNoteDuration);
+                // Drum notes should be a 16th note
+                var length = midi.DeltaTicksPerQuarterNote / 4;
+                var note = new NoteOnEvent(ThirdBarTime(midi), 1, range.Start, DefaultVelocity, length);
                 track.Add(note);
                 track.Add(note.OffEvent);
             }

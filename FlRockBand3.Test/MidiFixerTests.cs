@@ -837,10 +837,10 @@ namespace FlRockBand3.Test
             // 2 bars of 4 quarter notes * ppq
             var countIn = 1600;
 
-            var easyNote = new NoteOnEvent(countIn, 1, 60, 96, 120);
-            var mediumNote = new NoteOnEvent(countIn, 1, 72, 96, 120);
-            var hardNote = new NoteOnEvent(countIn, 1, 84, 96, 120);
-            var expertNote = new NoteOnEvent(countIn, 1, 96, 96, 120);
+            var easyNote = new NoteOnEvent(countIn, 1, 60, 96, 50);
+            var mediumNote = new NoteOnEvent(countIn, 1, 72, 96, 50);
+            var hardNote = new NoteOnEvent(countIn, 1, 84, 96, 50);
+            var expertNote = new NoteOnEvent(countIn, 1, 96, 96, 50);
 
             var originalMidi = new MidiEventCollection(1, 200);
             originalMidi.AddNamedTrack(TrackName.Drums.ToString());
@@ -867,10 +867,10 @@ namespace FlRockBand3.Test
             // 2 bars of 4 quarter notes * ppq
             var countIn = 1600;
 
-            var easyNote = new NoteOnEvent(countIn, 1, 60, 96, 120);
-            var mediumNote = new NoteOnEvent(6840, 1, 73, 96, 120);
-            var hardNote = new NoteOnEvent(countIn, 1, 84, 96, 120);
-            var expertNote = new NoteOnEvent(6840, 1, 98, 96, 120);
+            var easyNote = new NoteOnEvent(countIn, 1, 60, 96, 50);
+            var mediumNote = new NoteOnEvent(6840, 1, 73, 96, 50);
+            var hardNote = new NoteOnEvent(countIn, 1, 84, 96, 50);
+            var expertNote = new NoteOnEvent(6840, 1, 98, 96, 50);
 
             var originalMidi = new MidiEventCollection(1, 200);
             originalMidi.AddNamedTrackCopy(TrackName.Drums.ToString(),
