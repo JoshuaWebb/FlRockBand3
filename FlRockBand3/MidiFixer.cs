@@ -19,6 +19,9 @@ namespace FlRockBand3
         private static readonly int TicksInClick = 24;
         private const int No32ndNotesInQuarterNote = 8;
 
+        // Drum notes should be 16th notes at most
+        public int MaxDrumNoteLength(MidiEventCollection midi) => midi.DeltaTicksPerQuarterNote / 4;
+
         private const ushort PulsesPerQuarterNote = 480;
 
         public List<string> Messages { get; } = new List<string>();
@@ -52,6 +55,8 @@ namespace FlRockBand3
             AddDefaultDifficultyEventsDrums(midi);
 
             NormaliseVelocities(midi, DefaultVelocity);
+
+            CapDrumTrackDurations(midi);
 
             RemoveDuplicateNotes(midi);
 
@@ -644,14 +649,24 @@ namespace FlRockBand3
                     continue;
                 }
 
-                // Drum notes should be a 16th note
-                var length = midi.DeltaTicksPerQuarterNote / 4;
-                var note = new NoteOnEvent(ThirdBarTime(midi), 1, range.Start, DefaultVelocity, length);
+                var note = new NoteOnEvent(ThirdBarTime(midi), 1, range.Start, DefaultVelocity, MaxDrumNoteLength(midi));
                 track.Add(note);
                 track.Add(note.OffEvent);
             }
 
             UpdateTrackEnd(track);
+        }
+
+        public void CapDrumTrackDurations(MidiEventCollection midi)
+        {
+            var maxLength = MaxDrumNoteLength(midi);
+            var drumPart = midi.GetTrackByName(TrackName.Drums.ToString());
+
+            foreach (var noteOn in drumPart.OfType<NoteOnEvent>())
+            {
+                if (noteOn.OffEvent.AbsoluteTime - noteOn.AbsoluteTime > maxLength)
+                    noteOn.OffEvent.AbsoluteTime = noteOn.AbsoluteTime + maxLength;
+            }
         }
 
         public void RemoveInvalidEventTypes(MidiEventCollection midi)
