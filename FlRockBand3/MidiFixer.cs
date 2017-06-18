@@ -659,14 +659,10 @@ namespace FlRockBand3
 
         public void CapDrumTrackDurations(MidiEventCollection midi)
         {
-            var maxLength = MaxDrumNoteLength(midi);
             var drumPart = midi.GetTrackByName(TrackName.Drums.ToString());
 
             foreach (var noteOn in drumPart.OfType<NoteOnEvent>())
-            {
-                if (noteOn.OffEvent.AbsoluteTime - noteOn.AbsoluteTime > maxLength)
-                    noteOn.OffEvent.AbsoluteTime = noteOn.AbsoluteTime + maxLength;
-            }
+                noteOn.OffEvent.AbsoluteTime = noteOn.AbsoluteTime + 1;
         }
 
         public void RemoveInvalidEventTypes(MidiEventCollection midi)
