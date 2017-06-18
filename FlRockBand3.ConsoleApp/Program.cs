@@ -21,14 +21,14 @@ namespace FlRockBand3.ConsoleApp
             }
             else
             {
-                response = Console.ReadLine();
+                response = Console.ReadLine()?.Trim('"');
             }
 
             while (!File.Exists(response))
             {
                 Console.WriteLine($"File: {response} does not exsit");
                 Console.Write(prompt);
-                response = Console.ReadLine();
+                response = Console.ReadLine()?.Trim('"');
 
                 if (string.IsNullOrEmpty(response))
                 {
