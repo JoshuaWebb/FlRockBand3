@@ -230,9 +230,9 @@ namespace FlRockBand3
 
         public void NormaliseVelocities(MidiEventCollection midi, int newVelocity)
         {
-            for (var i = 0; i < midi.Tracks; i++)
+            for (var t = 0; t < midi.Tracks; t++)
             {
-                foreach (var noteOnEvent in midi[i].OfType<NoteOnEvent>())
+                foreach (var noteOnEvent in midi[t].OfType<NoteOnEvent>())
                 {
                     noteOnEvent.Velocity = newVelocity;
                     noteOnEvent.OffEvent.Velocity = 0;
@@ -254,9 +254,9 @@ namespace FlRockBand3
             var existingTextEvents = new List<TextEvent>();
             var exsitingNoteEvents = new List<MidiEvent>();
             var newEvents = new List<TextEvent>();
-            for (var i = 0; i < midi.Tracks; i++)
+            for (var t = 0; t < midi.Tracks; t++)
             {
-                var textEvents = midi[i].OfType<TextEvent>();
+                var textEvents = midi[t].OfType<TextEvent>();
                 var trackNameEvents = textEvents.
                     Where(e => e.MetaEventType == MetaEventType.SequenceTrackName).
                     OrderBy(e => e.AbsoluteTime).
@@ -275,19 +275,19 @@ namespace FlRockBand3
                         throw new NotSupportedException($"You cannot have '{TrackName.Events}' and '[event]' events on the same track");
                     }
 
-                    FilterEventNotes(midi, i, exsitingNoteEvents);
+                    FilterEventNotes(midi, t, exsitingNoteEvents);
 
                     // These are regular TextEvents already on the events track
                     // (not SequenceTrackName events that would require a conversion)
                     existingTextEvents.AddRange(textEvents.
                         Where(e => e.MetaEventType == MetaEventType.TextEvent && validEventNames.Contains(e.Text)));
 
-                    tracksToRemove.Add(i);
+                    tracksToRemove.Add(t);
                 }
 
                 foreach(var range in eventsRequiringConversion.GetRanges())
                 {
-                    var notes = midi[i].
+                    var notes = midi[t].
                         OfType<NoteOnEvent>().
                         Where(n => n.AbsoluteTime >= range.Start && n.AbsoluteTime < range.End);
 
@@ -295,7 +295,7 @@ namespace FlRockBand3
                         Select(n => new TextEvent(range.Name, MetaEventType.TextEvent, n.AbsoluteTime)).
                         ToList();
 
-                    tracksToRemove.Add(i);
+                    tracksToRemove.Add(t);
 
                     if (eventsForRange.Count == 0)
                     {
@@ -363,8 +363,8 @@ namespace FlRockBand3
         {
             // Remove in reverse order so the number of the remaining tracks to remove
             // aren't adjusted by the removals as we go
-            foreach (var i in trackNumbersToRemove.OrderByDescending(i => i))
-                midi.RemoveTrack(i);
+            foreach (var t in trackNumbersToRemove.OrderByDescending(i => i))
+                midi.RemoveTrack(t);
         }
 
         public void AddVenueTrack(MidiEventCollection midi)
@@ -671,9 +671,9 @@ namespace FlRockBand3
 
         public void RemoveInvalidEventTypes(MidiEventCollection midi)
         {
-            for (var i = 0; i < midi.Tracks; i++)
+            for (var t = 0; t < midi.Tracks; t++)
             {
-                var trackEvents = midi[i];
+                var trackEvents = midi[t];
                 var invalidEvents = trackEvents.Where(IsInvalid).ToList();
                 foreach (var invalidEvent in invalidEvents)
                     trackEvents.Remove(invalidEvent);
@@ -695,9 +695,9 @@ namespace FlRockBand3
         {
             // find all of the names
             var nameCounts = new Dictionary<string, int>();
-            for (var i = 0; i < midi.Tracks; i++)
+            for (var t = 0; t < midi.Tracks; t++)
             {
-                var names = midi[i].
+                var names = midi[t].
                     OfType<TextEvent>().
                     Where(e => e.MetaEventType == MetaEventType.SequenceTrackName).
                     ToList();
@@ -725,15 +725,15 @@ namespace FlRockBand3
                 var list = new List<MidiEvent>();
 
                 // iterate in reverse so track numbers don't change mid iteration
-                for (var i = midi.Tracks - 1; i >= 0; i--)
+                for (var t = midi.Tracks - 1; t >= 0; t--)
                 {
-                    if (!midi[i].OfType<TextEvent>().Any(e => e.IsSequenceTrackName() && e.Text == name))
+                    if (!midi[t].OfType<TextEvent>().Any(e => e.IsSequenceTrackName() && e.Text == name))
                         continue;
 
-                    var events = midi[i].Where(e => !MidiEvent.IsEndTrack(e) && !e.IsSequenceTrackName());
+                    var events = midi[t].Where(e => !MidiEvent.IsEndTrack(e) && !e.IsSequenceTrackName());
 
                     list.AddRange(events);
-                    midi.RemoveTrack(i);
+                    midi.RemoveTrack(t);
                 }
 
                 midi.AddNamedTrack(name, list.OrderBy(e => e.AbsoluteTime));
