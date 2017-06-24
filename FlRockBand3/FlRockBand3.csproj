@@ -50,6 +50,7 @@
     <Compile Include="EventName.cs" />
     <Compile Include="Exceptions\InvalidBeatTrackException.cs" />
     <Compile Include="Exceptions\TrackNotFoundException.cs" />
+    <Compile Include="MessageHandlerArgs.cs" />
     <Compile Include="MidiEventCollectionExtensions.cs" />
     <Compile Include="MidiEventExtensions.cs" />
     <Compile Include="MidiEventLocation.cs" />

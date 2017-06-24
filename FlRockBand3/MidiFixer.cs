@@ -24,7 +24,8 @@ namespace FlRockBand3
 
         private const ushort PulsesPerQuarterNote = 480;
 
-        public List<string> Messages { get; } = new List<string>();
+        public delegate void MessageHandler(object sender, MessageHandlerArgs args);
+        public event MessageHandler AddMessage;
 
         public void Fix(string midiPath, string outPath)
         {
@@ -65,9 +66,26 @@ namespace FlRockBand3
 
             midi = ReorderTracks(midi);
 
+            RemoveEmptyTracks(midi);
+
             AddVenueTrack(midi);
 
             MidiFile.Export(outPath, midi);
+        }
+
+        public void AddInfo(string message)
+        {
+            AddMessage?.Invoke(this, new MessageHandlerArgs(MessageHandlerArgs.MessageType.Info, message));
+        }
+
+        public void AddWarning(string message)
+        {
+            AddMessage?.Invoke(this, new MessageHandlerArgs(MessageHandlerArgs.MessageType.Warning, message));
+        }
+
+        public void AddError(string message)
+        {
+            AddMessage?.Invoke(this, new MessageHandlerArgs(MessageHandlerArgs.MessageType.Error, message));
         }
 
         public MidiEventCollection ReorderTracks(MidiEventCollection midi)
@@ -128,13 +146,10 @@ namespace FlRockBand3
             var eventsTrack = midi.GetTrackByName(TrackName.Events.ToString());
             var existingEvent = eventsTrack.FindFirstTextEvent(eventName);
             if (existingEvent != null)
-            {
-                Messages.Add($"Info: {eventName} event already exists at {GetBarInfo(midi, existingEvent)}");
                 return;
-            }
 
             var newEvent = new TextEvent(eventName, MetaEventType.TextEvent, time);
-            Messages.Add($"Info: Adding {eventName} event at {GetBarInfo(midi, newEvent)}");
+            AddInfo($"Adding {eventName} event at {GetBarInfo(midi, newEvent)}");
             eventsTrack.Add(newEvent);
         }
 
@@ -299,18 +314,19 @@ namespace FlRockBand3
 
                     if (eventsForRange.Count == 0)
                     {
-                        Messages.Add($"Warning: Cannot convert '{range.Name}' to an EVENT as it has no notes.");
+                        AddWarning($"Cannot convert '{range.Name}' to an EVENT as it has no notes.");
                         continue;
                     }
 
                     if (eventsForRange.Count > 1)
                     {
-                        Messages.Add(
-                            $"Warning: Cannot have more than one note for '{range.Name}'; " +
-                            "only the first will be converted to an EVENT.");
+                        AddWarning($"Cannot have more than one note for '{range.Name}'; " +
+                                   "only the first will be converted to an EVENT.");
                     }
 
-                    newEvents.Add(eventsForRange.First());
+                    var convertedEvent = eventsForRange.First();
+                    AddInfo($"{range.Name} event converted at {GetBarInfo(midi, convertedEvent)}");
+                    newEvents.Add(convertedEvent);
                 }
             }
 
@@ -324,7 +340,7 @@ namespace FlRockBand3
             var duplicateWarnings = string.Join(", ", duplicateEvents);
 
             if (!string.IsNullOrEmpty(duplicateWarnings))
-                Messages.Add($"Warning: Duplicate events {duplicateWarnings}; using first of each.");
+                AddWarning($"Duplicate events {duplicateWarnings}; using first of each.");
 
             var uniqueTextEvents = textEventsGroups.Select(kvp => kvp.OrderBy(e => e.AbsoluteTime).First());
 
@@ -352,7 +368,7 @@ namespace FlRockBand3
 
             var invalidNotes = noteEvents.Where(kvp => !kvp.Key).ToList();
             if (invalidNotes.Any())
-                Messages.Add($"Warning: Ignoring {invalidNotes.Count} note(s) on track {TrackName.Events} (#{track})");
+                AddWarning($"Ignoring {invalidNotes.Count} note(s) on track {TrackName.Events} (#{track})");
 
             var validNotes = noteEvents.Where(kvp => kvp.Key).SelectMany(e => e);
 
@@ -387,7 +403,7 @@ namespace FlRockBand3
                 ToList();
 
             foreach (var beat in invalidBeats)
-                Messages.Add($"Invalid note: {beat.NoteName} ({beat.NoteNumber}) at {GetBarInfo(midi, beat)}");
+                AddError($"Invalid note: {beat.NoteName} ({beat.NoteNumber}) at {GetBarInfo(midi, beat)}");
 
             if (invalidBeats.Count > 0)
                 throw new InvalidBeatTrackException("Invalid beats detected.");
@@ -407,7 +423,7 @@ namespace FlRockBand3
                 var existingEvent = eventsTrack.FindFirstTextEvent(EventName.End.ToString());
                 if (existingEvent != null)
                 {
-                    Messages.Add($"Info: {EventName.End} event already exists at {GetBarInfo(midi, existingEvent)}, left last beat in place.");
+                    AddInfo($"{EventName.End} event already exists at {GetBarInfo(midi, existingEvent)}, left last beat in place.");
                     return;
                 }
             }
@@ -459,7 +475,7 @@ namespace FlRockBand3
                 foreach (var conflict in conflictingTimeSignatures)
                 {
                     var details = string.Join(", ", conflict.Select(t => $"[{t.TimeSignature}]"));
-                    Messages.Add($"Error: Conflicting signatures {details} at {GetBarInfo(midi, conflict.Key)}");
+                    AddError($"Conflicting signatures {details} at {GetBarInfo(midi, conflict.Key)}");
                 }
                 hasConflict = true;
             }
@@ -474,7 +490,7 @@ namespace FlRockBand3
                 foreach (var conflict in conflictingTempos)
                 {
                     var details = string.Join(", ", conflict.Select(t => $"[{t.Tempo}]"));
-                    Messages.Add($"Error: Conflicting tempos {details} at {GetBarInfo(midi, conflict.Key)}");
+                    AddError($"Conflicting tempos {details} at {GetBarInfo(midi, conflict.Key)}");
                 }
                 hasConflict = true;
             }
@@ -489,13 +505,6 @@ namespace FlRockBand3
             midi.AddNamedTrack(TrackName.TempoMap.ToString(), events);
         }
 
-        private static void RemoveTrackIfEmpty(MidiEventCollection midi, int trackNumber)
-        {
-            // If a track only has an EndTrack (and optionally a name) then it is "empty"
-            if (midi[trackNumber].All(e => e.IsSequenceTrackName() || MidiEvent.IsEndTrack(e)))
-                midi.RemoveTrack(trackNumber);
-        }
-
         public void ProcessTimeSignatures(MidiEventCollection midi)
         {
             // This is way easier if these have already been consolidated
@@ -504,7 +513,7 @@ namespace FlRockBand3
             var timeSigTrackNo = midi.FindTrackNumberByName(TrackName.InputTimeSig.ToString());
             if (timeSigTrackNo == -1)
             {
-                Messages.Add($"Info: No '{TrackName.InputTimeSig}' track");
+                AddInfo($"No '{TrackName.InputTimeSig}' track");
                 return;
             }
 
@@ -524,7 +533,7 @@ namespace FlRockBand3
                 {
                     error = true;
                     var detail = string.Join(", ", sorted.Select(e => $"<{e.NoteName} ({e.NoteNumber}), Velocity: {e.Velocity}>"));
-                    Messages.Add($"Error: Incorrect number of time signature notes at {GetBarInfo(midi, time)}: {detail}");
+                    AddError($"Incorrect number of time signature notes at {GetBarInfo(midi, time)}: {detail}");
                     continue;
                 }
 
@@ -532,7 +541,7 @@ namespace FlRockBand3
                 {
                     error = true;
                     var detail = string.Join(", ", sorted.Select(e => $"<{e.NoteName} ({e.NoteNumber}), Velocity: {e.Velocity}>"));
-                    Messages.Add($"Error: Multiple notes with the same velocity at {GetBarInfo(midi, time)}: {detail}");
+                    AddError($"Multiple notes with the same velocity at {GetBarInfo(midi, time)}: {detail}");
                     continue;
                 }
 
@@ -542,7 +551,7 @@ namespace FlRockBand3
                 if (!TryConvertToDenominator(sorted[1].NoteNumber, out denominator))
                 {
                     error = true;
-                    Messages.Add($"Error: Invalid denominator note '{sorted[1].NoteNumber}' at {time}");
+                    AddError($"Invalid denominator note '{sorted[1].NoteNumber}' at {time}");
                     continue;
                 }
 
@@ -645,7 +654,7 @@ namespace FlRockBand3
             {
                 if (notes.Any(n => n.NoteNumber >= range.Start && n.NoteNumber <= range.End))
                 {
-                    Messages.Add($"Info: {TrackName.Drums} already has at least one '{range.Name}' note.");
+                    AddInfo($"{TrackName.Drums} already has at least one '{range.Name}' note.");
                     continue;
                 }
 
@@ -734,6 +743,24 @@ namespace FlRockBand3
 
                 midi.AddNamedTrack(name, list.OrderBy(e => e.AbsoluteTime));
             }
+        }
+
+        private void RemoveEmptyTracks(MidiEventCollection midi)
+        {
+            for (var t = midi.Tracks - 1; t >= 0; t--)
+                RemoveTrackIfEmpty(midi, t);
+        }
+
+        private bool RemoveTrackIfEmpty(MidiEventCollection midi, int trackNumber)
+        {
+            // If a track only has an EndTrack (and optionally a name) then it is "empty"
+            if (midi[trackNumber].All(e => e.IsSequenceTrackName() || MidiEvent.IsEndTrack(e)))
+            {
+                midi.RemoveTrack(trackNumber);
+                return true;
+            }
+
+            return false;
         }
     }
 }

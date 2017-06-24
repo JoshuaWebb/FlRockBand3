@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using FlRockBand3.Exceptions;
 using NAudio.Midi;
@@ -9,6 +10,48 @@ namespace FlRockBand3.Test
     [TestFixture]
     public class MidiFixerTests
     {
+        private class MidiFixerHarness
+        {
+            public MidiFixer Fixer { get; }
+            public List<string> Info { get; }
+            public List<string> Warnings { get; }
+            public List<string> Errors { get; }
+
+            public MidiFixerHarness()
+            {
+                Fixer = new MidiFixer();
+
+                Info = new List<string>();
+                Warnings = new List<string>();
+                Errors = new List<string>();
+
+                Fixer.AddMessage += (sender, args) =>
+                {
+                    switch (args.Type)
+                    {
+                        case MessageHandlerArgs.MessageType.Info:
+                            Info.Add(args.Message);
+                            break;
+                        case MessageHandlerArgs.MessageType.Warning:
+                            Warnings.Add(args.Message);
+                            break;
+                        case MessageHandlerArgs.MessageType.Error:
+                            Errors.Add(args.Message);
+                            break;
+
+                        default:
+                            throw new ArgumentOutOfRangeException(nameof(args.Type));
+                    }
+                };
+            }
+
+            public void AssertNoWarningsOrErrors()
+            {
+                Assert.That(Errors, Is.Empty);
+                Assert.That(Warnings, Is.Empty);
+            }
+        }
+
         [Test]
         public void TestUpdatePpqMultipleEventsOnMultipleTracks()
         {
@@ -41,8 +84,8 @@ namespace FlRockBand3.Test
             expectedMidi.AddTrack(expectedNote, expectedNote.OffEvent, expectedEnd1);
             expectedMidi.AddTrack(expectedText, expectedTimeSignature, expectedTempo, expectedEnd2);
 
-            var fixer = new MidiFixer();
-            var actualMidi = fixer.UpdatePpq(inputMidi, newPpq);
+            var harness = new MidiFixerHarness();
+            var actualMidi = harness.Fixer.UpdatePpq(inputMidi, newPpq);
 
             MidiAssert.Equal(originalMidi, inputMidi);
             MidiAssert.Equal(expectedMidi, actualMidi);
@@ -65,8 +108,8 @@ namespace FlRockBand3.Test
             // Create a brand new copy of the original midi so we can verify it wasn't modified
             var inputMidi = originalMidi.Clone();
 
-            var fixer = new MidiFixer();
-            var actualMidi = fixer.UpdatePpq(inputMidi, newPpq);
+            var harness = new MidiFixerHarness();
+            var actualMidi = harness.Fixer.UpdatePpq(inputMidi, newPpq);
 
             MidiAssert.Equal(originalMidi, inputMidi);
             MidiAssert.Equal(expectedMidi, actualMidi);
@@ -92,8 +135,8 @@ namespace FlRockBand3.Test
             // Create a brand new copy of the original midi so we can verify it wasn't modified
             var inputMidi = originalMidi.Clone();
 
-            var fixer = new MidiFixer();
-            var actualMidi = fixer.UpdatePpq(inputMidi, newPpq);
+            var harness = new MidiFixerHarness();
+            var actualMidi = harness.Fixer.UpdatePpq(inputMidi, newPpq);
 
             MidiAssert.Equal(originalMidi, inputMidi);
             MidiAssert.Equal(expectedMidi, actualMidi);
@@ -116,8 +159,8 @@ namespace FlRockBand3.Test
             // Create a brand new copy of the original midi so we can verify it wasn't modified
             var inputMidi = originalMidi.Clone();
 
-            var fixer = new MidiFixer();
-            var actualMidi = fixer.UpdatePpq(inputMidi, 200);
+            var harness = new MidiFixerHarness();
+            var actualMidi = harness.Fixer.UpdatePpq(inputMidi, 200);
 
             MidiAssert.Equal(originalMidi, inputMidi);
             MidiAssert.Equal(expectedMidi, actualMidi);
@@ -150,8 +193,8 @@ namespace FlRockBand3.Test
             originalMidi.AddTrackCopy(notes.Skip(maxVelocity / 2).SelectMany(n => new[] { n, n.OffEvent }));
 
             const int normalisedVelocity = 100;
-            var fixer = new MidiFixer();
-            fixer.NormaliseVelocities(originalMidi, normalisedVelocity);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.NormaliseVelocities(originalMidi, normalisedVelocity);
 
             Assert.That(originalMidi.OfType<NoteOnEvent>(), Has.All.Property(nameof(NoteEvent.Velocity)).EqualTo(normalisedVelocity));
             Assert.That(originalMidi.SelectMany(t => t).Where(MidiEvent.IsNoteOff), Has.All.Property(nameof(NoteEvent.Velocity)).EqualTo(0));
@@ -179,9 +222,10 @@ namespace FlRockBand3.Test
                 new TextEvent(newEventText, MetaEventType.TextEvent, newEventTime)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new [] {newEventText, existingEventText});
-            Assert.That(fixer.Messages, Is.Empty);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new [] {newEventText, existingEventText});
+            Assert.That(harness.Warnings, Is.Empty);
+            Assert.That(harness.Errors, Is.Empty);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -201,9 +245,8 @@ namespace FlRockBand3.Test
                 new TextEvent(eventText, MetaEventType.TextEvent, t)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new[] {eventText});
-            Assert.That(fixer.Messages, Is.Empty);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new[] {eventText});
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -226,9 +269,9 @@ namespace FlRockBand3.Test
             expectedMidi.AddNamedTrack(TrackName.Events.ToString(), new TextEvent(eventText, MetaEventType.TextEvent, t));
             expectedMidi.AddTrackCopy(regularTrack);
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new [] {eventText});
-            Assert.That(fixer.Messages, Is.Empty);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new [] {eventText});
+            harness.AssertNoWarningsOrErrors();
 
             // don't care about the order of the tracks
             MidiAssert.Equivalent(expectedMidi, originalMidi);
@@ -257,9 +300,9 @@ namespace FlRockBand3.Test
                 new TextEvent("[Name B]", MetaEventType.TextEvent, nameTwoNote.AbsoluteTime)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new[] { "[Name A]", "[Name B]" });
-            Assert.That(fixer.Messages, Is.Empty);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new[] { "[Name A]", "[Name B]" });
+            harness.AssertNoWarningsOrErrors();
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -283,10 +326,10 @@ namespace FlRockBand3.Test
                 new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
 
-            Assert.That(fixer.Messages, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
+            Assert.That(harness.Warnings, Is.EqualTo(new[] { "Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -305,10 +348,10 @@ namespace FlRockBand3.Test
                 new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
 
-            Assert.That(fixer.Messages, Is.EqualTo(new[] { "Warning: Duplicate events '[Name One]'; using first of each." }));
+            Assert.That(harness.Warnings, Is.EqualTo(new[] { "Duplicate events '[Name One]'; using first of each." }));
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -333,10 +376,10 @@ namespace FlRockBand3.Test
                 new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[No Notes]" });
 
-            Assert.That(fixer.Messages, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
+            Assert.That(harness.Warnings, Is.EqualTo(new[] { "Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -354,10 +397,10 @@ namespace FlRockBand3.Test
                 new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]" });
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]" });
 
-            Assert.That(fixer.Messages, Is.EqualTo(new[] { "Warning: Cannot have more than one note for '[Name One]'; only the first will be converted to an EVENT." }));
+            Assert.That(harness.Warnings, Is.EqualTo(new[] { "Cannot have more than one note for '[Name One]'; only the first will be converted to an EVENT." }));
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -370,10 +413,10 @@ namespace FlRockBand3.Test
             var expectedMidi = new MidiEventCollection(1, 200);
             expectedMidi.AddNamedTrack(TrackName.Events.ToString());
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new[] { "[No Notes]" });
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new[] { "[No Notes]" });
 
-            Assert.That(fixer.Messages, Is.EqualTo(new[] { "Warning: Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
+            Assert.That(harness.Warnings, Is.EqualTo(new[] { "Cannot convert '[No Notes]' to an EVENT as it has no notes." }));
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -395,10 +438,10 @@ namespace FlRockBand3.Test
                 new TextEvent(eventText, MetaEventType.TextEvent, noteOn.AbsoluteTime)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[Name Two]" });
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[Name Two]" });
 
-            Assert.That(fixer.Messages, Is.Empty);
+            harness.AssertNoWarningsOrErrors();
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -416,8 +459,8 @@ namespace FlRockBand3.Test
                 new MetaEvent(MetaEventType.EndTrack, 0, noteOn.OffEvent.AbsoluteTime)
             );
 
-            var fixer = new MidiFixer();
-            Assert.Throws<NotSupportedException>(() => fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[Name Two]" }));
+            var harness = new MidiFixerHarness();
+            Assert.Throws<NotSupportedException>(() => harness.Fixer.ProcessEventTracks(originalMidi, new[] { "[Name One]", "[Name Two]" }));
         }
 
         [Test]
@@ -441,8 +484,8 @@ namespace FlRockBand3.Test
             var expectedMidi = new MidiEventCollection(1, 200);
             expectedMidi.AddTrack(stn, noteOn, noteOn.OffEvent, txt, tse, tpo, end);
 
-            var fixer = new MidiFixer();
-            fixer.RemoveInvalidEventTypes(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.RemoveInvalidEventTypes(originalMidi);
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -456,8 +499,8 @@ namespace FlRockBand3.Test
                 new MetaEvent(MetaEventType.EndTrack, 0, 3)
             );
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<InvalidOperationException>(() => fixer.ConsolidateTracks(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<InvalidOperationException>(() => harness.Fixer.ConsolidateTracks(originalMidi));
             Assert.AreEqual("Multiple names '[Name One]', '[Name Two]' on the same track.", ex.Message);
         }
 
@@ -475,8 +518,8 @@ namespace FlRockBand3.Test
             var expectedMidi = new MidiEventCollection(1, 200);
             expectedMidi.AddNamedTrack(trackName, noteOn2, noteOn2.OffEvent, noteOn1, noteOn1.OffEvent);
 
-            var fixer = new MidiFixer();
-            fixer.ConsolidateTracks(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConsolidateTracks(originalMidi);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -497,8 +540,8 @@ namespace FlRockBand3.Test
             expectedMidi.AddTrackCopy(track1);
             expectedMidi.AddTrackCopy(track2);
 
-            var fixer = new MidiFixer();
-            fixer.ConsolidateTracks(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConsolidateTracks(originalMidi);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -523,8 +566,8 @@ namespace FlRockBand3.Test
             expectedMidi.AddNamedTrack(trackName1, text1, noteOn1, noteOn1.OffEvent);
             expectedMidi.AddNamedTrack(trackName2, text2, noteOn2, noteOn2.OffEvent);
 
-            var fixer = new MidiFixer();
-            fixer.ConsolidateTracks(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConsolidateTracks(originalMidi);
 
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
@@ -541,8 +584,8 @@ namespace FlRockBand3.Test
             var expectedMidi = new MidiEventCollection(1, 200);
             expectedMidi.AddNamedTrack(TrackName.TempoMap.ToString(), timeSig, tempoEvent);
 
-            var fixer = new MidiFixer();
-            fixer.ConsolidateTimeTracks(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConsolidateTimeTracks(originalMidi);
 
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
@@ -559,8 +602,8 @@ namespace FlRockBand3.Test
             expectedMidi.AddNamedTrack(TrackName.TempoMap.ToString(), timeSig);
             expectedMidi.AddTrackCopy(text);
 
-            var fixer = new MidiFixer();
-            fixer.ConsolidateTimeTracks(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConsolidateTimeTracks(originalMidi);
 
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
@@ -577,8 +620,8 @@ namespace FlRockBand3.Test
             expectedMidi.AddNamedTrack(TrackName.TempoMap.ToString(), tempoEvent);
             expectedMidi.AddTrackCopy(text);
 
-            var fixer = new MidiFixer();
-            fixer.ConsolidateTimeTracks(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConsolidateTimeTracks(originalMidi);
 
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
@@ -594,8 +637,8 @@ namespace FlRockBand3.Test
             var expectedMidi = new MidiEventCollection(1, 200);
             expectedMidi.AddNamedTrackCopy(TrackName.TempoMap.ToString(), tempoEvent1);
 
-            var fixer = new MidiFixer();
-            fixer.ConsolidateTimeTracks(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConsolidateTimeTracks(originalMidi);
 
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
@@ -611,8 +654,8 @@ namespace FlRockBand3.Test
             var expectedMidi = new MidiEventCollection(1, 200);
             expectedMidi.AddNamedTrackCopy(TrackName.TempoMap.ToString(), timeSig1);
 
-            var fixer = new MidiFixer();
-            fixer.ConsolidateTimeTracks(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConsolidateTimeTracks(originalMidi);
 
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
@@ -625,12 +668,12 @@ namespace FlRockBand3.Test
             var tempo2 = new TempoEvent(500000, 2);
             originalMidi.AddTrackCopy(tempo1, tempo2);
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<InvalidOperationException>(() => fixer.ConsolidateTimeTracks(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<InvalidOperationException>(() => harness.Fixer.ConsolidateTimeTracks(originalMidi));
             Assert.AreEqual("Conflicting time signature/tempo events", ex.Message);
             Assert.AreEqual(
-                new[] {"Error: Conflicting tempos [100], [120] at [1:1 in 4/4 (2 ticks)]"},
-                fixer.Messages
+                new[] {"Conflicting tempos [100], [120] at [1:1 in 4/4 (2 ticks)]"},
+                harness.Errors
             );
         }
 
@@ -642,12 +685,12 @@ namespace FlRockBand3.Test
             var timeSig2 = new TimeSignatureEvent(10, 6, 3, 24, 8);
             originalMidi.AddTrackCopy(timeSig1, timeSig2);
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<InvalidOperationException>(() => fixer.ConsolidateTimeTracks(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<InvalidOperationException>(() => harness.Fixer.ConsolidateTimeTracks(originalMidi));
             Assert.AreEqual("Conflicting time signature/tempo events", ex.Message);
             Assert.AreEqual(
-                new[] { "Error: Conflicting signatures [4/4], [6/8] at [1:1 in 4/4 (10 ticks)]" },
-                fixer.Messages
+                new[] { "Conflicting signatures [4/4], [6/8] at [1:1 in 4/4 (10 ticks)]" },
+                harness.Errors
             );
         }
 
@@ -656,8 +699,8 @@ namespace FlRockBand3.Test
         {
             var originalMidi = new MidiEventCollection(1, 200);
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<TrackNotFoundException>(() => fixer.ConvertLastBeatToEnd(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<TrackNotFoundException>(() => harness.Fixer.ConvertLastBeatToEnd(originalMidi));
 
             Assert.AreEqual(TrackName.Beat.ToString(), ex.TrackName);
             Assert.AreEqual("A track named 'BEAT' is required, but cannot be found.", ex.Message);
@@ -669,8 +712,8 @@ namespace FlRockBand3.Test
             var originalMidi = new MidiEventCollection(1, 200);
             originalMidi.AddNamedTrack(TrackName.Beat.ToString());
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<InvalidBeatTrackException>(() => fixer.ConvertLastBeatToEnd(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<InvalidBeatTrackException>(() => harness.Fixer.ConvertLastBeatToEnd(originalMidi));
 
             Assert.AreEqual("No notes were found on the BEAT track", ex.Message);
         }
@@ -695,8 +738,8 @@ namespace FlRockBand3.Test
                 new TextEvent(EventName.End.ToString(), MetaEventType.TextEvent, beatNote2.AbsoluteTime)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ConvertLastBeatToEnd(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConvertLastBeatToEnd(originalMidi);
 
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
@@ -716,14 +759,14 @@ namespace FlRockBand3.Test
                 badNote2, badNote2.OffEvent
             );
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<InvalidBeatTrackException>(() => fixer.ValidateBeatTrack(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<InvalidBeatTrackException>(() => harness.Fixer.ValidateBeatTrack(originalMidi));
 
             Assert.AreEqual(new []
             {
                 "Invalid note: D0 (2) at [1:3 in 4/4 (400 ticks)]",
                 "Invalid note: E0 (4) at [1:4 in 4/4 (600 ticks)]",
-            }, fixer.Messages);
+            }, harness.Errors);
 
             Assert.AreEqual("Invalid beats detected.", ex.Message);
         }
@@ -739,10 +782,10 @@ namespace FlRockBand3.Test
                 goodNote2, goodNote2.OffEvent
             );
 
-            var fixer = new MidiFixer();
-            fixer.ValidateBeatTrack(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ValidateBeatTrack(originalMidi);
 
-            Assert.That(fixer.Messages, Is.Empty);
+            harness.AssertNoWarningsOrErrors();
         }
 
         [Test]
@@ -761,10 +804,10 @@ namespace FlRockBand3.Test
             expectedMidi.AddNamedTrackCopy(TrackName.Beat.ToString(), beatNote1, beatNote1.OffEvent);
             expectedMidi.AddTrackCopy(eventsTrack);
 
-            var fixer = new MidiFixer();
-            fixer.ConvertLastBeatToEnd(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ConvertLastBeatToEnd(originalMidi);
 
-            Assert.AreEqual(new [] { "Info: [end] event already exists at [1:3 in 4/4 (500 ticks)], left last beat in place." }, fixer.Messages);
+            Assert.AreEqual(new [] { "[end] event already exists at [1:3 in 4/4 (500 ticks)], left last beat in place." }, harness.Info);
             MidiAssert.Equivalent(expectedMidi, originalMidi);
         }
 
@@ -773,8 +816,8 @@ namespace FlRockBand3.Test
         {
             var originalMidi = new MidiEventCollection(1, 200);
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<TrackNotFoundException>(() => fixer.AddDrumMixEvents(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<TrackNotFoundException>(() => harness.Fixer.AddDrumMixEvents(originalMidi));
             Assert.AreEqual(TrackName.Drums.ToString(), ex.TrackName);
         }
 
@@ -792,8 +835,8 @@ namespace FlRockBand3.Test
                 new TextEvent("[mix 3 drums0]", MetaEventType.TextEvent, 0)
             );
 
-            var fixer = new MidiFixer();
-            fixer.AddDrumMixEvents(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.AddDrumMixEvents(originalMidi);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -815,8 +858,8 @@ namespace FlRockBand3.Test
                 new TextEvent("[mix 3 drums0]", MetaEventType.TextEvent, 0)
             );
 
-            var fixer = new MidiFixer();
-            fixer.AddDrumMixEvents(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.AddDrumMixEvents(originalMidi);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -826,8 +869,8 @@ namespace FlRockBand3.Test
         {
             var originalMidi = new MidiEventCollection(1, 200);
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<TrackNotFoundException>(() => fixer.AddDefaultDifficultyEventsDrums(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<TrackNotFoundException>(() => harness.Fixer.AddDefaultDifficultyEventsDrums(originalMidi));
             Assert.AreEqual(TrackName.Drums.ToString(), ex.TrackName);
         }
 
@@ -855,8 +898,8 @@ namespace FlRockBand3.Test
                 expertNote, expertNote.OffEvent
             );
 
-            var fixer = new MidiFixer();
-            fixer.AddDefaultDifficultyEventsDrums(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.AddDefaultDifficultyEventsDrums(originalMidi);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -887,14 +930,14 @@ namespace FlRockBand3.Test
                 hardNote, hardNote.OffEvent
             );
 
-            var fixer = new MidiFixer();
-            fixer.AddDefaultDifficultyEventsDrums(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.AddDefaultDifficultyEventsDrums(originalMidi);
 
             Assert.AreEqual(new []
             {
-                "Info: PART DRUMS already has at least one 'Medium' note.",
-                "Info: PART DRUMS already has at least one 'Expert' note.",
-            }, fixer.Messages);
+                "PART DRUMS already has at least one 'Medium' note.",
+                "PART DRUMS already has at least one 'Expert' note.",
+            }, harness.Info);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -957,10 +1000,10 @@ namespace FlRockBand3.Test
                 new TimeSignatureEvent(50, numerator, expectedDenominator, 24, 8)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessTimeSignatures(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessTimeSignatures(originalMidi);
 
-            Assert.That(fixer.Messages, Is.Empty);
+            harness.AssertNoWarningsOrErrors();
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -989,10 +1032,10 @@ namespace FlRockBand3.Test
                 new TimeSignatureEvent(50, 6, 3, 24, 8)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessTimeSignatures(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessTimeSignatures(originalMidi);
 
-            Assert.That(fixer.Messages, Is.Empty);
+            harness.AssertNoWarningsOrErrors();
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -1021,10 +1064,10 @@ namespace FlRockBand3.Test
                 new TimeSignatureEvent(100, 6, 3, 24, 8)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessTimeSignatures(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessTimeSignatures(originalMidi);
 
-            Assert.That(fixer.Messages, Is.Empty);
+            harness.AssertNoWarningsOrErrors();
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -1051,10 +1094,10 @@ namespace FlRockBand3.Test
                 new TimeSignatureEvent(50, 4, 2, 24, 8)
             );
 
-            var fixer = new MidiFixer();
-            fixer.ProcessTimeSignatures(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessTimeSignatures(originalMidi);
 
-            Assert.That(fixer.Messages, Is.Empty);
+            harness.AssertNoWarningsOrErrors();
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
 
@@ -1074,14 +1117,14 @@ namespace FlRockBand3.Test
                 denominatorNote2.OffEvent
             );
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<InvalidOperationException>(() => fixer.ProcessTimeSignatures(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<InvalidOperationException>(() => harness.Fixer.ProcessTimeSignatures(originalMidi));
 
             Assert.AreEqual(new []
             {
-                "Error: Incorrect number of time signature notes at [2:2 in 4/4 (50 ticks)]: <G0 (7), Velocity: 1>",
-                "Error: Incorrect number of time signature notes at [3:3 in 4/4 (100 ticks)]: <E0 (4), Velocity: 2>"
-            }, fixer.Messages);
+                "Incorrect number of time signature notes at [2:2 in 4/4 (50 ticks)]: <G0 (7), Velocity: 1>",
+                "Incorrect number of time signature notes at [3:3 in 4/4 (100 ticks)]: <E0 (4), Velocity: 2>"
+            }, harness.Errors);
 
             Assert.AreEqual("Invalid time signature input", ex.Message);
         }
@@ -1099,10 +1142,10 @@ namespace FlRockBand3.Test
             var expectedMidi = new MidiEventCollection(1, 10);
             expectedMidi.AddNamedTrack(TrackName.TempoMap.ToString(), timeSig, tempoEvent);
 
-            var fixer = new MidiFixer();
-            fixer.ProcessTimeSignatures(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.ProcessTimeSignatures(originalMidi);
 
-            Assert.AreEqual(new[] { "Info: No 'timesig' track"}, fixer.Messages);
+            Assert.AreEqual(new[] { "No 'timesig' track" }, harness.Info);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -1129,16 +1172,16 @@ namespace FlRockBand3.Test
                 denominatorNote2.OffEvent
             );
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<InvalidOperationException>(() => fixer.ProcessTimeSignatures(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<InvalidOperationException>(() => harness.Fixer.ProcessTimeSignatures(originalMidi));
 
             Assert.AreEqual(new[]
             {
-                "Error: Multiple notes with the same velocity at [2:2 in 4/4 (50 ticks)]:"
+                "Multiple notes with the same velocity at [2:2 in 4/4 (50 ticks)]:"
                     + " <G0 (7), Velocity: 40>, <E0 (4), Velocity: 40>",
-                "Error: Multiple notes with the same velocity at [3:3 in 4/4 (100 ticks)]:"
+                "Multiple notes with the same velocity at [3:3 in 4/4 (100 ticks)]:"
                     + " <G0 (7), Velocity: 40>, <E0 (4), Velocity: 40>"
-            }, fixer.Messages);
+            }, harness.Errors);
 
             Assert.AreEqual("Invalid time signature input", ex.Message);
         }
@@ -1173,16 +1216,16 @@ namespace FlRockBand3.Test
                 thirdNote2.OffEvent
             );
 
-            var fixer = new MidiFixer();
-            var ex = Assert.Throws<InvalidOperationException>(() => fixer.ProcessTimeSignatures(originalMidi));
+            var harness = new MidiFixerHarness();
+            var ex = Assert.Throws<InvalidOperationException>(() => harness.Fixer.ProcessTimeSignatures(originalMidi));
 
             Assert.AreEqual(new[]
             {
-                "Error: Incorrect number of time signature notes at [2:2 in 4/4 (50 ticks)]:"
+                "Incorrect number of time signature notes at [2:2 in 4/4 (50 ticks)]:"
                     + " <G0 (7), Velocity: 3>, <E0 (4), Velocity: 2>, <F0 (5), Velocity: 1>",
-                "Error: Incorrect number of time signature notes at [3:3 in 4/4 (100 ticks)]:"
+                "Incorrect number of time signature notes at [3:3 in 4/4 (100 ticks)]:"
                     + " <G0 (7), Velocity: 3>, <E0 (4), Velocity: 2>, <F0 (5), Velocity: 1>"
-            }, fixer.Messages);
+            }, harness.Errors);
 
             Assert.AreEqual("Invalid time signature input", ex.Message);
         }
@@ -1199,8 +1242,8 @@ namespace FlRockBand3.Test
             expectedMidi.AddNamedTrackCopy("", note, note.OffEvent);
             expectedMidi.AddNamedTrackCopy("", note, note.OffEvent);
 
-            var fixer = new MidiFixer();
-            fixer.RemoveDuplicateNotes(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.RemoveDuplicateNotes(originalMidi);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -1219,8 +1262,8 @@ namespace FlRockBand3.Test
             var expectedMidi = new MidiEventCollection(1, 10);
             expectedMidi.AddNamedTrackCopy("", note, note.OffEvent);
 
-            var fixer = new MidiFixer();
-            fixer.RemoveDuplicateNotes(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.RemoveDuplicateNotes(originalMidi);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
@@ -1249,8 +1292,8 @@ namespace FlRockBand3.Test
                 otherNote, otherNote.OffEvent
             );
 
-            var fixer = new MidiFixer();
-            fixer.RemoveDuplicateNotes(originalMidi);
+            var harness = new MidiFixerHarness();
+            harness.Fixer.RemoveDuplicateNotes(originalMidi);
 
             MidiAssert.Equal(expectedMidi, originalMidi);
         }
