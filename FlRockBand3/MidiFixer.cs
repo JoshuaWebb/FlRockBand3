@@ -461,7 +461,8 @@ namespace FlRockBand3
                 foreach (var midiEvent in tempoEvents)
                     midi[t].Remove(midiEvent);
 
-                RemoveTrackIfEmpty(midi, t);
+                if (timeSignatureEvents.Any() || tempoEvents.Any())
+                    RemoveTrackIfEmpty(midi, t);
             }
 
             var groupedTimeSignatureEvents = allTimeSignatureEvents.
