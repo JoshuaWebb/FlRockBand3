@@ -43,14 +43,6 @@ namespace FlRockBand3
 
             ProcessTimeSignatures(midi);
 
-            ConvertLastBeatToEnd(midi);
-
-            AddMusicEndEvent(midi);
-
-            AddMusicStartEvent(midi);
-
-            ValidateBeatTrack(midi);
-
             AddDrumMixEvents(midi);
 
             AddDefaultDifficultyEventsDrums(midi);
@@ -60,6 +52,14 @@ namespace FlRockBand3
             CapDrumTrackDurations(midi);
 
             RemoveDuplicateNotes(midi);
+
+            ConvertLastBeatToEnd(midi);
+
+            ValidateBeatTrack(midi);
+
+            AddMusicEndEvent(midi);
+
+            AddMusicStartEvent(midi);
 
             // Do towards the end in case other processes require "invalid" events
             RemoveInvalidEventTypes(midi);
