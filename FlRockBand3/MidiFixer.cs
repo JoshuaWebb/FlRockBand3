@@ -17,7 +17,7 @@ namespace FlRockBand3
 
         // TODO: is this always this?
         private static readonly int TicksInClick = 24;
-        private const int No32ndNotesInQuarterNote = 8;
+        private const int NumberOfThirtySecondNotesInQuarterNote = 8;
 
         // Drum notes should be 16th notes at most
         public int MaxDrumNoteLength(MidiEventCollection midi) => midi.DeltaTicksPerQuarterNote / 4;
@@ -88,7 +88,7 @@ namespace FlRockBand3
             AddMessage?.Invoke(this, new MessageHandlerArgs(MessageHandlerArgs.MessageType.Error, message));
         }
 
-        public MidiEventCollection ReorderTracks(MidiEventCollection midi)
+        public static MidiEventCollection ReorderTracks(MidiEventCollection midi)
         {
             var newMidi = new MidiEventCollection(midi.MidiFileType, midi.DeltaTicksPerQuarterNote);
             var tempoMapIndex = midi.FindTrackNumberByName(TrackName.TempoMap.ToString());
@@ -171,7 +171,7 @@ namespace FlRockBand3
             return new MidiEventLocation(absoluteTime, fourFourBar, fourFourBeat, fourFourTicks);
         }
 
-        public static IEnumerable<string> LoadPracticeSections()
+        public IEnumerable<string> LoadPracticeSections()
         {
             // TODO: log which practice sections we're using
             string practiceSections;
@@ -181,6 +181,8 @@ namespace FlRockBand3
             }
             catch (IOException ioe)
             {
+                AddWarning($"Couldn't load custom practice sections file: {ioe.Message}\n" +
+                           "Using the default.\n");
                 practiceSections = Resources.All_Practice_Sections;
             }
 
@@ -556,7 +558,7 @@ namespace FlRockBand3
                     continue;
                 }
 
-                var timeSigEvent = new TimeSignatureEvent(time, numerator, denominator, TicksInClick, No32ndNotesInQuarterNote);
+                var timeSigEvent = new TimeSignatureEvent(time, numerator, denominator, TicksInClick, NumberOfThirtySecondNotesInQuarterNote);
                 var existingTimeSigEvent = timeEvents.OfType<TimeSignatureEvent>().SingleOrDefault(e => e.AbsoluteTime == time);
                 if (existingTimeSigEvent != null)
                     timeEvents.Remove(existingTimeSigEvent);
@@ -667,11 +669,25 @@ namespace FlRockBand3
             UpdateTrackEnd(track);
         }
 
+        private const int OverdriveNoteNumber = 116;
+
+        private static readonly ISet<int> DrumFillNoteNumbers
+            = new HashSet<int>(new[] {120, 121, 122, 123, 124});
+
+        private static readonly ISet<int> SpecialNoteNumbers
+            = new HashSet<int>(DrumFillNoteNumbers.Concat(new [] {OverdriveNoteNumber}));
+
         public void CapDrumTrackDurations(MidiEventCollection midi)
         {
             var drumPart = midi.GetTrackByName(TrackName.Drums.ToString());
 
-            foreach (var noteOn in drumPart.OfType<NoteOnEvent>())
+            // Don't shorten the special notes because they are supposed to
+            // overlap the regular notes
+            var regularDrumNotes = drumPart.
+                OfType<NoteOnEvent>().
+                Where(note => !SpecialNoteNumbers.Contains(note.NoteNumber));
+
+            foreach (var noteOn in regularDrumNotes)
                 noteOn.OffEvent.AbsoluteTime = noteOn.AbsoluteTime + 1;
         }
 
